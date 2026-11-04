@@ -23,6 +23,8 @@ from app.config import get_settings
 from app.crypto import InvalidToken, decrypt, encrypt
 from app.db import CleanupEvent, FileState, MediaFile, OAuthToken, User, get_db, init_db
 
+# Uvicorn only configures its own loggers; this makes app.* (e.g. cleanup) show up too.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger(__name__)
 
 # Holds OAuth `state` + PKCE verifier between /login and /callback. Encrypted, 10 min max.

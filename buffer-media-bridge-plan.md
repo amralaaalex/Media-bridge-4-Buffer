@@ -297,8 +297,9 @@ Owner tags: **[YOU]** means Amr does it (accounts, setup, content, recording). *
 - [ ] [CC] Stats page from `cleanup_events` (files held and purged, bytes, average hold time).
 
 ### Day 8 (Nov 11): ship
-- [ ] [CC] Dockerfile, deploy config, README, structured logging. `/health` already exists.
-- [ ] [YOU + CC] **Before deploying, empty the Neon `main` branch** (needs Amr's OK, because it deletes data).
+- [x] [CC] Deploy config: `render.yaml` (native Python runtime, Frankfurt, starter plan, `/health` check), proxy headers, app logging, and a Postgres advisory lock so only one cleanup worker runs during deploy overlap. A Dockerfile was skipped because Docker isn't available to test it. `.env.production` (gitignored) holds every Render env var.
+- [ ] [CC] README.
+- [x] [YOU + CC] **Before deploying, empty the Neon `main` branch** (done 2026-11-04 with Amr's OK; `dev` untouched) (needs Amr's OK, because it deletes data).
   - `main` still holds the test files and a copy of Amr's Buffer refresh token, which `dev` also has.
   - Refresh tokens are single-use, so if both copies ever refresh, Buffer revokes the grant.
   - Truncate `cleanup_events`, `media_files`, `oauth_tokens` and `users` on `main`. Production users log in fresh on the deployed app.
@@ -346,6 +347,9 @@ Buffer slack: Nov 13 is the hard deadline; the plan leaves one day of margin.
 - 2026-11-03: Designed "Leash" scoped-token gateway; judged too complex / low roadmap demand (4 votes).
 - 2026-11-04: **Chose media hosting as the core feature.** Keep it simple. Leash parked as a late add-on.
 - 2026-11-04: Verified contest rules on the official page; confirmed submission needs app link + write-up + demo video, registration required, service must stay up through judging (to Dec 7).
+- 2026-11-04: Hosting is **Render**, native Python runtime, on the default `media-bridge.onrender.com` URL with no custom domain, so R2 stays on r2.dev for now.
+  - The start command was verified locally with `uv sync --frozen --no-dev`.
+  - `--forwarded-allow-ips '*'` was moved to the `FORWARDED_ALLOW_IPS` env var because the shell glob-expanded the `*`.
 - 2026-11-04: **Core lifecycle test passed live**, with Amr's own scheduled LinkedIn post.
   - The post was created at 11:53:58 UTC, Buffer published it at 12:00:25, the job checked once at 12:02:00, and the image was purged at 12:02:01 (R2 returns 404).
   - The published post keeps its image because LinkedIn holds its own copy (`urn:li:image:…`).

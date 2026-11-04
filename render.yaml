@@ -1,0 +1,45 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# One always-on web service in Frankfurt, next to the Neon database and the R2 bucket.
+services:
+  - type: web
+    name: media-bridge
+    runtime: python
+    region: frankfurt
+    plan: starter # always on; free instances sleep, which would stop the cleanup worker
+    numInstances: 1 # the cleanup worker runs in-process; an advisory lock covers deploy overlap
+    branch: main
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+    # Render terminates TLS; proxy headers make url_for() build https:// links. The trusted
+    # proxy list comes from FORWARDED_ALLOW_IPS below (a literal * on the command line can
+    # be glob-expanded by the shell into file names).
+    startCommand: uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers
+    healthCheckPath: /health # must not touch the DB, so health checks don't keep Neon awake
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.7
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"
+      - key: APP_BASE_URL
+        sync: false # https://<service>.onrender.com
+      - key: BUFFER_REDIRECT_URI
+        sync: false # https://<service>.onrender.com/callback (also register it on the app client)
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false # Fernet key; generate a new one for production
+      - key: BUFFER_CLIENT_ID
+        sync: false
+      - key: BUFFER_CLIENT_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false # Neon *main* branch, direct endpoint, postgresql+psycopg://
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        value: media-bridge
+      - key: R2_PUBLIC_BASE_URL
+        sync: false

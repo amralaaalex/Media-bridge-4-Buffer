@@ -9,15 +9,17 @@ scale to zero) when nothing is due.
 import logging
 import threading
 from collections import defaultdict
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 
 import httpx
 from botocore.exceptions import BotoCoreError, ClientError
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app import buffer_client, media, oauth
-from app.db import CleanupEvent, FileState, MediaFile, SessionLocal, User, utcnow
+from app.db import CleanupEvent, FileState, MediaFile, SessionLocal, User, engine, utcnow
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +35,7 @@ def run_pass(db: Session, http: httpx.Client, now: datetime | None = None) -> da
     now = now or utcnow()
     _expire(db, now)
     backoff_until = _check_held_posts(db, http, now)
+    log.info("Cleanup pass done at %s", now.isoformat(timespec="seconds"))
     if backoff_until is not None:
         # Due files are still due; waking at their (past) time would spin. Wait it out.
         return backoff_until
@@ -157,6 +160,29 @@ def _apply(db: Session, f: MediaFile, posts: dict, now: datetime) -> None:
     db.commit()
 
 
+# Identifies the cleanup job's Postgres advisory lock (any constant works).
+_LOCK_KEY = 0x6D62636C
+
+
+@contextmanager
+def single_runner() -> Iterator[bool]:
+    """Yield whether this process may run a pass now.
+
+    During a deploy Render runs the old and new instance side by side; the advisory lock
+    keeps their cleanup workers from checking the same posts twice. SQLite: always True.
+    """
+    if engine.dialect.name != "postgresql":
+        yield True
+        return
+    with engine.connect() as conn:
+        got = conn.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": _LOCK_KEY}).scalar()
+        try:
+            yield bool(got)
+        finally:
+            if got:
+                conn.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": _LOCK_KEY})
+
+
 class CleanupWorker:
     """Background thread that sleeps until the next file is due. `poke()` wakes it early."""
 
@@ -181,8 +207,13 @@ class CleanupWorker:
         while not self._stop.is_set():
             self._wake.clear()
             try:
-                with SessionLocal() as db:
-                    next_at = run_pass(db, self._http)
+                with single_runner() as mine:
+                    if mine:
+                        with SessionLocal() as db:
+                            next_at = run_pass(db, self._http)
+                    else:
+                        log.info("Another instance is running cleanup; retrying in a minute")
+                        next_at = utcnow() + timedelta(minutes=1)
             except Exception:
                 log.exception("Cleanup pass failed")
                 next_at = utcnow() + timedelta(minutes=5)

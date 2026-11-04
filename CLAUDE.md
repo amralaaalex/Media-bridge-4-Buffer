@@ -39,6 +39,17 @@ Tests set their env vars in `tests/conftest.py` before importing `app.*`, becaus
 
 Python's default file encoding here is cp1252. When editing files from scripts, always pass `encoding="utf-8"` (or set `PYTHONUTF8=1`): writing a non-cp1252 character such as `↗` raises mid-write and **truncates the file to 0 bytes**. That happened once to `app/static/app.js`. Prefer the Edit tool.
 
+## Deploy (Render)
+
+- `render.yaml` is a Blueprint: native Python runtime (no Docker) in Frankfurt.
+  - Build: `pip install uv && uv sync --frozen --no-dev`.
+  - Start: `uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers`.
+- Production env vars live in the gitignored `.env.production`.
+  - `DATABASE_URL` there is the Neon **main** branch.
+  - `FORWARDED_ALLOW_IPS=*` must stay an env var. A `*` in the start command gets glob-expanded into file names.
+- Keep `/health` free of DB access, because Render's health checks would otherwise keep Neon awake.
+- The cleanup worker takes a Postgres advisory lock (`cleanup.single_runner()`) each pass, so deploy overlap can't run two workers.
+
 ## Code map
 
 - `app/oauth.py` handles PKCE, the code exchange and `get_access_token()`. That function is the **only** place tokens are refreshed (see the rotation rules below).
