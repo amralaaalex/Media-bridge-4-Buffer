@@ -298,6 +298,10 @@ Owner tags: **[YOU]** means Amr does it (accounts, setup, content, recording). *
 
 ### Day 8 (Nov 11): ship
 - [ ] [CC] Dockerfile, deploy config, README, structured logging. `/health` already exists.
+- [ ] [YOU + CC] **Before deploying, empty the Neon `main` branch** (needs Amr's OK, because it deletes data).
+  - `main` still holds the test files and a copy of Amr's Buffer refresh token, which `dev` also has.
+  - Refresh tokens are single-use, so if both copies ever refresh, Buffer revokes the grant.
+  - Truncate `cleanup_events`, `media_files`, `oauth_tokens` and `users` on `main`. Production users log in fresh on the deployed app.
 - [ ] [YOU] Deploy. Set the env vars on the host (the `.env` values with the Postgres URL, and `BUFFER_REDIRECT_URI` / `APP_BASE_URL` set to the production URL).
 - [ ] [YOU] App client: add the production redirect URI `https://<app-domain>/callback`, the logo and the privacy policy URL (`/privacy`).
 - [ ] [YOU] R2: attach the custom domain and update `R2_PUBLIC_BASE_URL` (if a domain is used).
@@ -342,6 +346,8 @@ Buffer slack: Nov 13 is the hard deadline; the plan leaves one day of margin.
 - 2026-11-03: Designed "Leash" scoped-token gateway; judged too complex / low roadmap demand (4 votes).
 - 2026-11-04: **Chose media hosting as the core feature.** Keep it simple. Leash parked as a late add-on.
 - 2026-11-04: Verified contest rules on the official page; confirmed submission needs app link + write-up + demo video, registration required, service must stay up through judging (to Dec 7).
+- 2026-11-04: Created Neon branch **`dev`** (`br-raspy-tree-b94qulg7`) for local development. `.env` points at its direct endpoint, and `.neon` is pinned to it. **`main` is reserved for production**, so the laptop's cleanup worker never touches live files.
+  - Both branches share one R2 bucket. That's harmless as long as each row's object is only referenced on one branch, which holds once `main` is emptied before deploy.
 - 2026-11-04: Day 5 UI done.
   - Built with Jinja templates and vanilla JS (`app/static/app.js`) on top of the JSON API, with no build step.
   - Pages: landing, the app page (composer + "Your images"), `/privacy` and error pages.
