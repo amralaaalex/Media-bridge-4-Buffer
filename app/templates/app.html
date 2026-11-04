@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block nav %}
+<a href="/privacy">Privacy</a>
+<details class="menu">
+  <summary>Account</summary>
+  <div class="menu-panel">
+    <form method="post" action="/logout"><button class="menu-item" type="submit">Log out</button></form>
+    <button class="menu-item danger" type="button" id="delete-account">Delete my data…</button>
+  </div>
+</details>
+{% endblock %}
+{% block main_class %}container wide{% endblock %}
+{% block content %}
+<div class="layout">
+  <section class="card composer" aria-labelledby="composer-title">
+    <h1 id="composer-title" class="card-title">New post</h1>
+
+    <form id="composer" novalidate>
+      <label class="dropzone" id="dropzone">
+        <input type="file" id="file-input" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
+        <div class="dz-empty">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+          <strong>Drop an image here</strong>
+          <span>or click to choose · JPEG, PNG, GIF, WebP · up to {{ max_upload_mb }} MB</span>
+        </div>
+        <div class="dz-preview" hidden>
+          <img id="preview" alt="">
+          <div class="dz-meta"><span id="file-name"></span><button type="button" class="link" id="change-file">Change</button></div>
+        </div>
+      </label>
+
+      <fieldset class="field">
+        <legend>Channel</legend>
+        <div class="channels" id="channels" role="radiogroup">
+          <div class="skeleton-row"><span class="skeleton"></span><span class="skeleton"></span></div>
+        </div>
+      </fieldset>
+
+      <div class="field">
+        <div class="label-row"><label for="text">Caption</label><span class="counter" id="counter">0</span></div>
+        <textarea id="text" rows="4" maxlength="3000" placeholder="What do you want to say?"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="alt">Alt text <span class="optional">recommended</span></label>
+        <input id="alt" type="text" maxlength="1000" placeholder="Describe the image for people using screen readers">
+      </div>
+
+      <fieldset class="field">
+        <legend>When</legend>
+        <div class="segmented" id="modes">
+          <label><input type="radio" name="mode" value="queue" checked><span>Add to queue</span></label>
+          <label><input type="radio" name="mode" value="schedule"><span>Schedule</span></label>
+          <label><input type="radio" name="mode" value="now"><span>Publish now</span></label>
+          <label><input type="radio" name="mode" value="draft"><span>Draft</span></label>
+        </div>
+        <div class="schedule-row" id="schedule-row" hidden>
+          <input type="datetime-local" id="due-at" aria-label="Publish time">
+          <span class="muted" id="tz-label"></span>
+        </div>
+        <p class="hint" id="mode-hint"></p>
+      </fieldset>
+
+      <p class="form-error" id="form-error" role="alert" hidden></p>
+      <button class="btn btn-primary btn-block" id="submit" type="submit">
+        <span class="spinner" aria-hidden="true"></span><span id="submit-label">Add to queue</span>
+      </button>
+      <p class="fine">
+        We keep this image only until Buffer sends your post, then delete it. Images that are never
+        posted are deleted after {{ unattached_ttl_hours }} hours. <a href="/privacy">How we handle your data</a>
+      </p>
+    </form>
+  </section>
+
+  <section class="card files" aria-labelledby="files-title">
+    <div class="card-head">
+      <h2 id="files-title" class="card-title">Your images</h2>
+      <button class="link" id="refresh" type="button">Refresh</button>
+    </div>
+    <ul class="file-list" id="file-list" aria-live="polite"></ul>
+    <div class="empty" id="files-empty" hidden>
+      <p><strong>Nothing here yet.</strong></p>
+      <p class="muted">Images you post show up here, with what happens to them and when.</p>
+    </div>
+  </section>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+{% endblock %}
+{% block scripts %}
+<script>window.MB = { maxUploadMb: {{ max_upload_mb }}, mediaTtlDays: {{ media_ttl_days }} };</script>
+<script src="{{ url_for('static', path='app.js') }}" defer></script>
+{% endblock %}

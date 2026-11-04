@@ -285,10 +285,10 @@ Owner tags: **[YOU]** means Amr does it (accounts, setup, content, recording). *
 - [ ] [CC + YOU] Live test: schedule a post 5–10 min out on the throwaway channel, then confirm the file survives until `sent` and is purged after. Needs the second channel.
 
 ### Day 5 (Nov 8): UI [CC]
-- [ ] [CC] Upload page: drag-and-drop, channel picker, caption, alt text, and a queue / schedule / draft choice.
-- [ ] [CC] Status page: files with state, linked post, due and purge times, and the delete-now button.
-- [ ] [CC] Privacy note: what is stored, for how long, and how to delete it. Also serve it at `/privacy` so its URL can go on the app client.
-- [ ] [CC] Friendly errors: Buffer rejections, rate limits, reconnect prompts.
+- [x] [CC] Upload page: drag-and-drop, channel picker, caption, alt text, and a queue / schedule / draft choice.
+- [x] [CC] Status page (the "Your images" panel next to the composer): files with state, linked post, due and purge times, and the delete-now button.
+- [x] [CC] Privacy note: what is stored, for how long, and how to delete it. Also serve it at `/privacy` so its URL can go on the app client.
+- [x] [CC] Friendly errors: Buffer rejections, rate limits, reconnect prompts.
 - [ ] [YOU] Review the UI. The Delight Award is judged on user experience.
 
 ### Day 6–7 (Nov 9–10): add-ons, only if core is done
@@ -342,6 +342,11 @@ Buffer slack: Nov 13 is the hard deadline; the plan leaves one day of margin.
 - 2026-11-03: Designed "Leash" scoped-token gateway; judged too complex / low roadmap demand (4 votes).
 - 2026-11-04: **Chose media hosting as the core feature.** Keep it simple. Leash parked as a late add-on.
 - 2026-11-04: Verified contest rules on the official page; confirmed submission needs app link + write-up + demo video, registration required, service must stay up through judging (to Dec 7).
+- 2026-11-04: Day 5 UI done.
+  - Built with Jinja templates and vanilla JS (`app/static/app.js`) on top of the JSON API, with no build step.
+  - Pages: landing, the app page (composer + "Your images"), `/privacy` and error pages.
+  - Extras: paste-from-clipboard, light and dark mode, mobile layout, "Delete my data" (`POST /api/account/delete`), and a footer disclaimer ("not affiliated").
+  - Verified in Edge via Playwright: a real draft went through the UI, then Delete now. No console errors.
 - 2026-11-04: Lifecycle built and tested live (scenarios 1, 3, 4 and 6 pass).
   - The cleanup job is a thread that sleeps until `min(next_check_at)`, woken early by uploads and posts. This replaced APScheduler.
   - Postgres connections use NullPool, so idle pooled connections can't keep Neon awake.

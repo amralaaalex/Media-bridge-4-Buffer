@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · media-bridge{% endblock %}
+{% block content %}
+<section class="card narrow center">
+  <h1>{{ title }}</h1>
+  <p class="muted">{{ message }}</p>
+  <p><a class="btn btn-primary" href="/login">Try again</a></p>
+</section>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Privacy · media-bridge{% endblock %}
+{% block content %}
+<article class="card prose narrow">
+  <h1>Privacy</h1>
+  <p class="muted">media-bridge keeps as little as it can, for as short a time as it can.</p>
+
+  <h2>What we store</h2>
+  <ul>
+    <li><strong>Your image</strong>, at a public but unguessable address. It has to be public so Buffer can fetch it when your post goes out.</li>
+    <li><strong>Your Buffer account and organization IDs</strong>, to know which files are yours.</li>
+    <li><strong>Buffer access tokens</strong>, encrypted, so we can create your post and check whether it was sent.</li>
+    <li><strong>The Buffer post ID, channel ID, post status and timestamps</strong> for each image, plus a log of when and why each image was deleted.</li>
+  </ul>
+  <p>We don't store your post text, your password, or anything from your social accounts.</p>
+
+  <h2>How long we keep your image</h2>
+  <ul>
+    <li><strong>Until Buffer sends your post.</strong> Then we delete it automatically.</li>
+    <li>If you <strong>delete the post in Buffer</strong>, we delete the image too.</li>
+    <li>Images you upload but <strong>never post</strong> are deleted after {{ unattached_ttl_hours }} hours.</li>
+    <li>Drafts and posts that never publish are deleted after at most {{ media_ttl_days }} days.</li>
+  </ul>
+
+  <h2>Deleting things yourself</h2>
+  <ul>
+    <li><strong>Delete now</strong> on any image removes it immediately.</li>
+    <li><strong>Delete my data</strong> (in the account menu) removes every image and every record about you. Your posts in Buffer are not touched.</li>
+    <li>To revoke our access to Buffer, remove media-bridge from the connected apps in your Buffer account settings.</li>
+  </ul>
+
+  <h2>Who we share with</h2>
+  <p>
+    Images are stored with Cloudflare R2 and records with Neon Postgres (Frankfurt). Buffer fetches
+    your image to publish it. Nobody else gets your data, and we don't use analytics or ads.
+  </p>
+
+  <p class="fine">
+    media-bridge is an independent project built on the Buffer API for the Buffer Commit contest.
+    It isn't affiliated with or endorsed by Buffer. Questions: open an issue on
+    <a href="https://github.com/amralaaalex/Media-bridge-4-Buffer">GitHub</a>.
+  </p>
+</article>
+{% endblock %}

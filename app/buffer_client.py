@@ -100,7 +100,7 @@ query Account {
 CHANNELS_QUERY = """
 query Channels($organizationId: OrganizationId!) {
   channels(input: { organizationId: $organizationId }) {
-    id name displayName service isDisconnected isLocked
+    id name displayName service avatar isDisconnected isLocked
   }
 }
 """

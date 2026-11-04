@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <p class="eyebrow">For people who post with Buffer</p>
+  <h1>Post images to Buffer without hosting them yourself.</h1>
+  <p class="lead">
+    Buffer's API only accepts images that are already online somewhere, and a scheduled post
+    breaks if that file disappears before it publishes. media-bridge hosts the image for you,
+    keeps it exactly until Buffer sends your post, then deletes it.
+  </p>
+  {% if reconnect %}
+  <p class="notice">Your Buffer connection expired. Connect again to pick up where you left off.</p>
+  {% endif %}
+  <a class="btn btn-primary btn-lg" href="/login">Connect Buffer</a>
+  <p class="fine">You'll approve access on Buffer's own page. We never see your password.</p>
+</section>
+
+<ol class="steps">
+  <li>
+    <span class="step-num">1</span>
+    <h2>Drop an image</h2>
+    <p>JPEG, PNG, GIF or WebP. It gets a private, unguessable link.</p>
+  </li>
+  <li>
+    <span class="step-num">2</span>
+    <h2>Pick a channel and a time</h2>
+    <p>Queue it, schedule it, publish now, or save a draft in Buffer.</p>
+  </li>
+  <li>
+    <span class="step-num">3</span>
+    <h2>It cleans up after itself</h2>
+    <p>Once Buffer sends the post, the image is deleted. Nothing left lying around.</p>
+  </li>
+</ol>
+{% endblock %}

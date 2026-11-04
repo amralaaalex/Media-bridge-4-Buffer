@@ -4,14 +4,16 @@ import secrets
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime
-from html import escape
+from pathlib import Path
 from typing import Annotated
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -19,7 +21,7 @@ from app import buffer_client, media, oauth
 from app.cleanup import CleanupWorker
 from app.config import get_settings
 from app.crypto import InvalidToken, decrypt, encrypt
-from app.db import FileState, MediaFile, User, get_db, init_db
+from app.db import CleanupEvent, FileState, MediaFile, OAuthToken, User, get_db, init_db
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +50,9 @@ async def lifespan(app: FastAPI):
 
 settings = get_settings()
 app = FastAPI(title="media-bridge", lifespan=lifespan)
+_HERE = Path(__file__).parent
+app.mount("/static", StaticFiles(directory=_HERE / "static"), name="static")
+templates = Jinja2Templates(directory=_HERE / "templates")
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret,
@@ -70,14 +75,10 @@ def current_user(request: Request, db: Session) -> User | None:
     return db.get(User, uid) if uid else None
 
 
-def page(body: str) -> HTMLResponse:
-    return HTMLResponse(
-        "<!doctype html><html><head><meta charset='utf-8'>"
-        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        "<title>media-bridge</title></head>"
-        f"<body style='font-family:system-ui;max-width:40rem;margin:2rem auto;padding:0 1rem'>"
-        f"<h1>media-bridge</h1>{body}"
-        "<p><small>Built on the Buffer API.</small></p></body></html>"
+def page(request: Request, title: str, message: str, status_code: int = 200) -> HTMLResponse:
+    """A simple message page (login errors and the like). `message` is plain text."""
+    return templates.TemplateResponse(
+        request, "message.html", {"title": title, "message": message}, status_code=status_code
     )
 
 
@@ -90,26 +91,29 @@ def health() -> dict:
 
 
 @app.get("/")
-def index(request: Request, db: DB, http: Http):
+def index(request: Request, db: DB):
     user = current_user(request, db)
     if user is None or user.disconnected_at is not None:
-        return page("<p><a href='/login'>Connect your Buffer account</a></p>")
-
-    try:
-        channels = _get_channels_cached(db, user, http)
-    except oauth.ReauthRequired:
-        return page("<p>Your Buffer connection expired. <a href='/login'>Reconnect</a></p>")
-    except buffer_client.BufferRateLimited as exc:
-        return page(f"<p>Buffer's rate limit was reached. Try again in {exc.retry_after}s.</p>")
-
-    items = "".join(
-        f"<li>{escape(c.get('displayName') or c['name'])} ({escape(c['service'])})"
-        f"{' — disconnected' if c.get('isDisconnected') else ''}</li>"
-        for c in channels
+        return templates.TemplateResponse(request, "landing.html", {"reconnect": user is not None})
+    s = get_settings()
+    return templates.TemplateResponse(
+        request,
+        "app.html",
+        {
+            "max_upload_mb": s.max_upload_mb,
+            "unattached_ttl_hours": s.unattached_ttl_hours,
+            "media_ttl_days": s.media_ttl_days,
+        },
     )
-    return page(
-        f"<p>Connected to Buffer.</p><h2>Your channels</h2><ul>{items or '<li>none</li>'}</ul>"
-        "<form method='post' action='/logout'><button>Log out</button></form>"
+
+
+@app.get("/privacy")
+def privacy(request: Request):
+    s = get_settings()
+    return templates.TemplateResponse(
+        request,
+        "privacy.html",
+        {"unattached_ttl_hours": s.unattached_ttl_hours, "media_ttl_days": s.media_ttl_days},
     )
 
 
@@ -147,10 +151,7 @@ def login():
 def callback(request: Request, db: DB, http: Http):
     params = request.query_params
     if params.get("error"):
-        return page(
-            f"<p>Buffer did not connect: {escape(params['error'])}.</p>"
-            "<p><a href='/login'>Try again</a></p>"
-        )
+        return page(request, "Not connected", f"Buffer did not connect ({params['error']}).")
 
     raw_tx = request.cookies.get(OAUTH_TX_COOKIE)
     try:
@@ -158,14 +159,14 @@ def callback(request: Request, db: DB, http: Http):
     except InvalidToken:
         tx = None
     if not tx or not secrets.compare_digest(tx["state"], params.get("state", "")):
-        return page("<p>Login session expired or invalid. <a href='/login'>Start again</a></p>")
+        return page(request, "Login expired", "The login took too long or was opened twice.")
 
     try:
         tokens = oauth.exchange_code(params.get("code", ""), tx["verifier"], http)
         account = buffer_client.get_account(http, tokens["access_token"])
     except (oauth.OAuthError, buffer_client.BufferError, httpx.HTTPError) as exc:
         log.warning("OAuth callback failed: %s", exc)
-        return page("<p>Could not finish connecting to Buffer. <a href='/login'>Try again</a></p>")
+        return page(request, "Not connected", "Could not finish connecting to Buffer.")
 
     orgs = account.get("organizations") or []
     user = db.execute(
@@ -217,8 +218,9 @@ def _owned_file(db: Session, user: User, file_id: str) -> MediaFile:
     return f
 
 
-def _file_json(f: MediaFile) -> dict:
+def _file_json(f: MediaFile, removed_reason: str | None = None) -> dict:
     return {
+        "removed_reason": removed_reason,
         "id": f.id,
         "url": f.public_url if f.state in (FileState.UPLOADED, FileState.HELD) else None,
         "state": f.state.value,
@@ -237,10 +239,37 @@ def _file_json(f: MediaFile) -> dict:
 
 @app.get("/api/files")
 def list_files(db: DB, user: CurrentUser) -> list[dict]:
-    files = db.execute(
-        select(MediaFile).where(MediaFile.user_id == user.id).order_by(MediaFile.created_at.desc())
-    ).scalars()
-    return [_file_json(f) for f in files]
+    files = (
+        db.execute(
+            select(MediaFile)
+            .where(MediaFile.user_id == user.id)
+            .order_by(MediaFile.created_at.desc())
+        )
+        .scalars()
+        .all()
+    )
+    # Why each removed file was removed: its final purge/expire event.
+    reasons = dict(
+        db.execute(
+            select(CleanupEvent.media_file_id, CleanupEvent.reason)
+            .join(MediaFile, MediaFile.id == CleanupEvent.media_file_id)
+            .where(MediaFile.user_id == user.id, CleanupEvent.decision != "keep")
+        ).all()
+    )
+    return [_file_json(f, reasons.get(f.id)) for f in files]
+
+
+@app.get("/api/channels")
+def list_channels(db: DB, http: Http, user: CurrentUser) -> list[dict]:
+    try:
+        channels = _get_channels_cached(db, user, http)
+    except oauth.ReauthRequired as exc:
+        raise HTTPException(401, "Your Buffer connection expired. Reconnect to continue.") from exc
+    except buffer_client.BufferRateLimited as exc:
+        raise HTTPException(
+            429, f"Buffer's rate limit was reached. Try again in {exc.retry_after}s."
+        ) from exc
+    return [c for c in channels if not c.get("isLocked")]
 
 
 @app.post("/api/files", status_code=201)
@@ -315,4 +344,29 @@ def delete_now(file_id: str, db: DB, user: CurrentUser) -> dict:
         if broke_post
         else None
     )
-    return {**_file_json(f), "warning": warning}
+    return {**_file_json(f, "user_deleted"), "warning": warning}
+
+
+@app.post("/api/account/delete")
+def delete_account(request: Request, db: DB, user: CurrentUser) -> dict:
+    """Delete every stored image and every row about this user. Buffer posts are untouched."""
+    for f in (
+        db.execute(
+            select(MediaFile).where(
+                MediaFile.user_id == user.id,
+                MediaFile.state.in_((FileState.UPLOADED, FileState.HELD)),
+            )
+        )
+        .scalars()
+        .all()
+    ):
+        media.remove_file(db, f, state=FileState.PURGED, decision="purge", reason="account_deleted")
+    file_ids = select(MediaFile.id).where(MediaFile.user_id == user.id)
+    db.execute(delete(CleanupEvent).where(CleanupEvent.media_file_id.in_(file_ids)))
+    db.execute(delete(MediaFile).where(MediaFile.user_id == user.id))
+    db.execute(delete(OAuthToken).where(OAuthToken.user_id == user.id))
+    db.execute(delete(User).where(User.id == user.id))
+    db.commit()
+    _channel_cache.pop(user.id, None)
+    request.session.clear()
+    return {"deleted": True}

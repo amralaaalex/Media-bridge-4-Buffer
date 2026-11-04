@@ -221,3 +221,33 @@ def test_api_upload_post_and_delete_now(db, buffer, user, r2):
             assert bad.status_code == 400
     finally:
         app.dependency_overrides.clear()
+
+
+def test_pages_render(db, user, monkeypatch):
+    from app import main
+
+    with TestClient(main.app, base_url="https://testserver") as client:
+        landing = client.get("/")
+        assert landing.status_code == 200 and "Connect Buffer" in landing.text
+        assert "Not affiliated" in landing.text
+        assert client.get("/privacy").status_code == 200
+        assert client.get("/static/app.js").status_code == 200
+        monkeypatch.setattr(main, "current_user", lambda request, db: db.get(User, user.id))
+        app_page = client.get("/")
+        assert app_page.status_code == 200 and "New post" in app_page.text
+
+
+def test_delete_account_removes_everything(db, buffer, user, r2):
+    from app.main import app, require_user
+
+    f = posted_file(db, buffer, user)
+    app.dependency_overrides[require_user] = lambda: db.get(User, user.id)
+    try:
+        with TestClient(app, base_url="https://testserver") as client:
+            assert client.post("/api/account/delete").json() == {"deleted": True}
+    finally:
+        app.dependency_overrides.clear()
+    db.expunge_all()
+    assert r2 == {}
+    assert db.get(User, user.id) is None and db.get(OAuthToken, user.id) is None
+    assert db.query(CleanupEvent).filter_by(media_file_id=f.id).count() == 0
