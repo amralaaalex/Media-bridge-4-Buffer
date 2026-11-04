@@ -346,6 +346,12 @@ Buffer slack: Nov 13 is the hard deadline; the plan leaves one day of margin.
 - 2026-11-03: Designed "Leash" scoped-token gateway; judged too complex / low roadmap demand (4 votes).
 - 2026-11-04: **Chose media hosting as the core feature.** Keep it simple. Leash parked as a late add-on.
 - 2026-11-04: Verified contest rules on the official page; confirmed submission needs app link + write-up + demo video, registration required, service must stay up through judging (to Dec 7).
+- 2026-11-04: **Core lifecycle test passed live**, with Amr's own scheduled LinkedIn post.
+  - The post was created at 11:53:58 UTC, Buffer published it at 12:00:25, the job checked once at 12:02:00, and the image was purged at 12:02:01 (R2 returns 404).
+  - The published post keeps its image because LinkedIn holds its own copy (`urn:li:image:…`).
+- 2026-11-04: Deleted files now keep a reminder: the original **file name** and the **live post link** (`externalLink`, saved at purge time).
+  - No thumbnail is kept, because that would contradict the privacy promise.
+  - New nullable columns are auto-added on startup.
 - 2026-11-04: Created Neon branch **`dev`** (`br-raspy-tree-b94qulg7`) for local development. `.env` points at its direct endpoint, and `.neon` is pinned to it. **`main` is reserved for production**, so the laptop's cleanup worker never touches live files.
   - Both branches share one R2 bucket. That's harmless as long as each row's object is only referenced on one branch, which holds once `main` is emptied before deploy.
 - 2026-11-04: Day 5 UI done.

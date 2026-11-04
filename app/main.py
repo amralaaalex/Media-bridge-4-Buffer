@@ -221,6 +221,8 @@ def _owned_file(db: Session, user: User, file_id: str) -> MediaFile:
 def _file_json(f: MediaFile, removed_reason: str | None = None) -> dict:
     return {
         "removed_reason": removed_reason,
+        "original_name": f.original_name,
+        "post_url": f.post_url,
         "id": f.id,
         "url": f.public_url if f.state in (FileState.UPLOADED, FileState.HELD) else None,
         "state": f.state.value,
@@ -277,7 +279,7 @@ def upload(file: UploadFile, request: Request, db: DB, user: CurrentUser) -> dic
     limit = get_settings().max_upload_mb * 1024 * 1024
     data = file.file.read(limit + 1)
     try:
-        f = media.upload_file(db, user, data)
+        f = media.upload_file(db, user, data, file.filename)
     except media.UploadRejected as exc:
         raise HTTPException(400, str(exc)) from exc
     request.app.state.cleanup.poke()

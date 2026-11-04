@@ -26,6 +26,7 @@ Regenerate the dev certificate with:
 `openssl req -x509 -newkey rsa:2048 -nodes -days 365 -subj "//CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" -keyout certs/key.pem -out certs/cert.pem`
 
 The database is Neon Postgres: project `media-bridge` (`wild-king-33369087`), Frankfurt, linked through the gitignored `.neon` file.
+- **Schema changes:** there are no migrations. `init_db()` runs `create_all` and then `_add_missing_columns()`, which adds any new **nullable** column to existing tables on startup (dev and prod alike). Anything else (renames, type changes, NOT NULL) needs a hand-written migration.
 - Local development uses the **`dev` branch** (`br-raspy-tree-b94qulg7`). **`main` is production only.** Never point a local server at `main`: its cleanup worker would act on live files, and a copied refresh token could get replayed and revoke the user's Buffer grant.
 - `DATABASE_URL` must use the `postgresql+psycopg://` scheme and the **direct** (non-`-pooler`) host.
 - `neon env pull` writes a plain `postgresql://` URL, so rewrite it by hand.
@@ -33,6 +34,10 @@ The database is Neon Postgres: project `media-bridge` (`wild-king-33369087`), Fr
 - The Neon CLI, MCP server and skills (`.claude/skills/neon*`) are installed. Tables are created by `init_db()` on startup; there are no migrations yet.
 
 Tests set their env vars in `tests/conftest.py` before importing `app.*`, because `app/db.py` builds the engine at import time. Buffer HTTP calls are faked with `httpx.MockTransport`. The app passes one shared `httpx.Client` into the functions that call Buffer, so tests can swap it.
+
+## Windows editing gotcha
+
+Python's default file encoding here is cp1252. When editing files from scripts, always pass `encoding="utf-8"` (or set `PYTHONUTF8=1`): writing a non-cp1252 character such as `↗` raises mid-write and **truncates the file to 0 bytes**. That happened once to `app/static/app.js`. Prefer the Edit tool.
 
 ## Code map
 

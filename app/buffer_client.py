@@ -189,7 +189,7 @@ def get_post(http: httpx.Client, access_token: str, post_id: str) -> dict:
 
 # Buffer caps aliases per query at 30.
 MAX_POSTS_PER_QUERY = 30
-_POST_FIELDS = "id status dueAt sentAt error { message }"
+_POST_FIELDS = "id status dueAt sentAt externalLink error { message }"
 
 
 def _is_not_found(error: dict) -> bool:

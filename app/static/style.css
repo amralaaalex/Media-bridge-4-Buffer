@@ -246,6 +246,11 @@ input:focus-visible, textarea:focus-visible, .btn:focus-visible, .link:focus-vis
 .file-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .file-channel { font-size: .85rem; color: var(--muted); }
 .file-detail { margin: 2px 0 0; font-size: .88rem; color: var(--muted); }
+.file-name { margin: 0 0 4px; font-weight: 600; font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-meta { margin: 2px 0 0; font-size: .8rem; color: var(--muted); }
+.thumb-link { display: block; border-radius: 10px; }
+.thumb-link .thumb { color: var(--ok); background: var(--ok-soft); }
+.thumb-link:hover .thumb { outline: 2px solid var(--accent); outline-offset: 1px; }
 .badge { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 650; padding: 2px 9px; border-radius: 999px; }
 .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .tone-info { background: var(--info-soft); color: var(--info); }

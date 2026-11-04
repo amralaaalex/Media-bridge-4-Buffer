@@ -13,6 +13,8 @@ from sqlalchemy import (
     Text,
     TypeDecorator,
     create_engine,
+    inspect,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from sqlalchemy.pool import NullPool
@@ -80,6 +82,9 @@ class MediaFile(Base):
     public_url: Mapped[str] = mapped_column(Text)
     content_type: Mapped[str] = mapped_column(String(32))
     size_bytes: Mapped[int] = mapped_column(BigInteger)
+    # Reminders of what the image was once it's deleted: its file name and the live post.
+    original_name: Mapped[str | None] = mapped_column(String(120))
+    post_url: Mapped[str | None] = mapped_column(Text)
     state: Mapped[FileState] = mapped_column(
         Enum(FileState, native_enum=False, length=16), default=FileState.UPLOADED
     )
@@ -124,6 +129,30 @@ SessionLocal = sessionmaker(engine, expire_on_commit=False)
 
 def init_db() -> None:
     Base.metadata.create_all(engine)
+    _add_missing_columns()
+
+
+def _add_missing_columns() -> None:
+    """Tiny stand-in for migrations: add new *nullable* columns to existing tables.
+
+    create_all only creates missing tables. Anything beyond adding a nullable column
+    (renames, type changes, NOT NULL) needs a real migration.
+    """
+    existing = inspect(engine)
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if not existing.has_table(table.name):
+                continue
+            have = {c["name"] for c in existing.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in have:
+                    continue
+                if not column.nullable:
+                    raise RuntimeError(f"{table.name}.{column.name} is NOT NULL; needs a migration")
+                col_type = column.type.compile(dialect=engine.dialect)
+                conn.execute(
+                    text(f'ALTER TABLE {table.name} ADD COLUMN "{column.name}" {col_type}')
+                )
 
 
 def get_db() -> Iterator[Session]:

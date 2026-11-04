@@ -42,7 +42,8 @@ class FakeBuffer:
                     {"message": "not found", "path": [alias], "extensions": {"code": "NOT_FOUND"}}
                 )
             else:
-                data[alias] = {**post, "sentAt": None, "error": None}
+                link = f"https://social.test/{pid}" if post["status"] == "sent" else None
+                data[alias] = {**post, "sentAt": None, "externalLink": link, "error": None}
         # `post` is non-null: any error nulls the whole response, as GraphQL would.
         return httpx.Response(200, json={"data": None if errors else data, "errors": errors})
 
@@ -138,6 +139,7 @@ def test_sent_post_purges_file(db, buffer, user, r2):
     db.refresh(f)
     assert f.state == FileState.PURGED and f.object_key not in r2
     assert ("purge", "post_sent") in events(db, f)
+    assert f.post_url == f"https://social.test/{f.buffer_post_id}"  # reminder of what it was
 
 
 def test_post_deleted_in_buffer_purges_file(db, buffer, user, r2):
@@ -251,3 +253,25 @@ def test_delete_account_removes_everything(db, buffer, user, r2):
     assert r2 == {}
     assert db.get(User, user.id) is None and db.get(OAuthToken, user.id) is None
     assert db.query(CleanupEvent).filter_by(media_file_id=f.id).count() == 0
+
+
+def test_filename_is_kept_clean(db, user, r2):
+    assert media.clean_filename(r"C:\Users\me\Pictures\launch day.png") == "launch day.png"
+    assert media.clean_filename("../../etc/x\x00y.png") == "xy.png"
+    assert media.clean_filename("a" * 300) == "a" * 120
+    assert media.clean_filename("") is None
+    f = media.upload_file(db, user, dummy_png(10, 10), "team photo.png")
+    assert f.original_name == "team photo.png"
+
+
+def test_init_db_adds_new_nullable_columns_to_old_tables():
+    from sqlalchemy import inspect, text
+
+    from app.db import init_db
+
+    with engine.begin() as conn:  # simulate a table created before the columns existed
+        conn.execute(text("ALTER TABLE media_files DROP COLUMN original_name"))
+        conn.execute(text("ALTER TABLE media_files DROP COLUMN post_url"))
+    init_db()
+    columns = {c["name"] for c in inspect(engine).get_columns("media_files")}
+    assert {"original_name", "post_url"} <= columns

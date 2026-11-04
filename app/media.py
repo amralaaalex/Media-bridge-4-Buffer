@@ -44,7 +44,7 @@ def sniff_content_type(data: bytes) -> str | None:
     return None
 
 
-def upload_file(db: Session, user: User, data: bytes) -> MediaFile:
+def upload_file(db: Session, user: User, data: bytes, filename: str | None = None) -> MediaFile:
     s = get_settings()
     if not data:
         raise UploadRejected("The file is empty.")
@@ -62,6 +62,7 @@ def upload_file(db: Session, user: User, data: bytes) -> MediaFile:
         public_url=url,
         content_type=content_type,
         size_bytes=len(data),
+        original_name=clean_filename(filename),
         state=FileState.UPLOADED,
         ttl_expires_at=expires,
         next_check_at=expires,
@@ -69,6 +70,15 @@ def upload_file(db: Session, user: User, data: bytes) -> MediaFile:
     db.add(media)
     db.commit()
     return media
+
+
+def clean_filename(name: str | None) -> str | None:
+    """Just the base name, printable, at most 120 chars. Shown back to its owner only."""
+    if not name:
+        return None
+    base = name.replace("\\", "/").rsplit("/", 1)[-1]
+    base = "".join(ch for ch in base if ch.isprintable()).strip()
+    return base[:120] or None
 
 
 def next_check_for(status: str | None, due_at: datetime | None, now: datetime) -> datetime:

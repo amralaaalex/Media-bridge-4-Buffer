@@ -39,9 +39,10 @@ def show(f: MediaFile) -> None:
 
 
 def cmd_post(args, db, http, user) -> None:
-    data = pathlib.Path(args.image).read_bytes()
+    path = pathlib.Path(args.image)
+    data = path.read_bytes()
     try:
-        f = media.upload_file(db, user, data)
+        f = media.upload_file(db, user, data, path.name)
     except media.UploadRejected as exc:
         sys.exit(f"upload rejected: {exc}")
     print(f"uploaded {f.public_url}")

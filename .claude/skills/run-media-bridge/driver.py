@@ -104,6 +104,7 @@ def cmd_draft_flow(browser, args, image, errors):
     page.locator(".file-delete").first.click()
     page.wait_for_function("document.querySelector('#toast').innerText.includes('deleted')")
     print("toast:", page.inner_text("#toast"))
+    page.wait_for_load_state("networkidle")  # let the file list re-render after the delete
     page.screenshot(path=OUT / "draft-flow-deleted.png", full_page=True)
     print(f"leftover Buffer draft to delete: {newest['buffer_post_id']}")
     ctx.close()

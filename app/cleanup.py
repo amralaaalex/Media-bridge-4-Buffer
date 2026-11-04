@@ -128,6 +128,7 @@ def _apply(db: Session, f: MediaFile, posts: dict, now: datetime) -> None:
         if post is _UNKNOWN:
             f.next_check_at = now + timedelta(minutes=15)
         elif post["status"] in media.DONE_STATUSES:
+            f.post_url = post.get("externalLink")
             media.remove_file(
                 db,
                 f,

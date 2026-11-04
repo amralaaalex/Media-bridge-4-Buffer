@@ -361,6 +361,8 @@
 
   const ICON_GONE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>';
 
+  const ICON_SENT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5 10 17l9-10"/></svg>';
+
   function renderFiles() {
     const list = $("file-list");
     list.innerHTML = "";
@@ -378,13 +380,19 @@
         thumb.loading = "lazy";
       } else {
         thumb = document.createElement("div");
-        thumb.innerHTML = ICON_GONE;
+        thumb.innerHTML = f.post_url ? ICON_SENT : ICON_GONE;
         thumb.title = "Image deleted";
       }
       thumb.className = "thumb";
 
       const main = document.createElement("div");
       main.className = "file-main";
+      // Name the image so the row still means something after the file is deleted.
+      const name = document.createElement("p");
+      name.className = "file-name";
+      name.textContent = f.original_name || "Untitled image"; // rows from before names were kept
+      name.title = name.textContent;
+      main.append(name);
       const top = document.createElement("div");
       top.className = "file-top";
       const badge = document.createElement("span");
@@ -402,6 +410,28 @@
       detail.className = "file-detail";
       detail.textContent = info.detail;
       main.append(top, detail);
+
+      const meta = document.createElement("p");
+      meta.className = "file-meta";
+      meta.textContent = `Uploaded ${when(f.created_at)}`;
+      if (f.post_url) {
+        const link = document.createElement("a");
+        link.href = f.post_url;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.textContent = "View post ↗";
+        meta.append(" · ", link);
+        // The published post shows the image, so the placeholder links there too.
+        const wrap = document.createElement("a");
+        wrap.href = f.post_url;
+        wrap.target = "_blank";
+        wrap.rel = "noopener";
+        wrap.title = "Open the published post";
+        wrap.className = "thumb-link";
+        wrap.append(thumb);
+        thumb = wrap;
+      }
+      main.append(meta);
 
       li.append(thumb, main);
       if (f.state === "UPLOADED" || f.state === "HELD") {
