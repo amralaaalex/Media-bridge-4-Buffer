@@ -275,3 +275,21 @@ def test_init_db_adds_new_nullable_columns_to_old_tables():
     init_db()
     columns = {c["name"] for c in inspect(engine).get_columns("media_files")}
     assert {"original_name", "post_url"} <= columns
+
+
+def test_stats_count_lifecycle_and_checks(db, buffer, user, r2):
+    from app import stats
+
+    sent = posted_file(db, buffer, user, minutes=60)
+    posted_file(db, buffer, user, minutes=60)  # still waiting
+    media.upload_file(db, user, dummy_png(10, 10))  # never posted
+    buffer.posts[sent.buffer_post_id]["status"] = "sent"
+    cleanup.run_pass(db, buffer.http, now=sent.next_check_at)  # one check: sent -> purged
+
+    s = stats.compute(db)
+    assert s["uploaded"] == 3 and s["posted"] == 2 and s["held_now"] == 1
+    assert s["published_then_deleted"] == 1 and s["removed"] == 1
+    assert s["median_minutes_to_delete"] == 2.0  # checked at due + 2 min
+    assert s["status_checks_per_post"] == 0.5  # 1 lookup so far / 2 posts (the other is not due)
+    assert sum(d["count"] for d in s["daily_uploads"]) == 3
+    assert len(s["daily_uploads"]) == 14

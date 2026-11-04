@@ -17,7 +17,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
-from app import buffer_client, media, oauth
+from app import buffer_client, media, oauth, stats
 from app.cleanup import CleanupWorker
 from app.config import get_settings
 from app.crypto import InvalidToken, decrypt, encrypt
@@ -107,6 +107,17 @@ def index(request: Request, db: DB):
             "media_ttl_days": s.media_ttl_days,
         },
     )
+
+
+@app.get("/stats")
+def stats_page(request: Request, db: DB):
+    return templates.TemplateResponse(request, "stats.html", {"stats": stats.compute(db)})
+
+
+@app.get("/api/stats")
+def stats_api(db: DB) -> dict:
+    """Public, anonymous aggregates (no per-user data)."""
+    return stats.compute(db)
 
 
 @app.get("/privacy")

@@ -294,7 +294,7 @@ Owner tags: **[YOU]** means Amr does it (accounts, setup, content, recording). *
 ### Day 6–7 (Nov 9–10): add-ons, only if core is done
 - [ ] [CC] Image prep per network (Pillow: resize, compress, convert format).
 - [ ] [CC] Agent access: a per-user API token plus a Claude Code skill or MCP tool `upload_and_post`. Buffer's own MCP can't upload, which makes a good story for the write-up.
-- [ ] [CC] Stats page from `cleanup_events` (files held and purged, bytes, average hold time).
+- [x] [CC] Stats page from `cleanup_events`: public `/stats` + `/api/stats` (anonymous aggregates, a single-series daily chart with tooltip and table view, colours validated with the dataviz validator) (files held and purged, bytes, average hold time).
 
 ### Day 8 (Nov 11): ship
 - [x] [CC] Deploy config: `render.yaml` (native Python runtime, Frankfurt, starter plan, `/health` check), proxy headers, app logging, and a Postgres advisory lock so only one cleanup worker runs during deploy overlap. A Dockerfile was skipped because Docker isn't available to test it. `.env.production` (gitignored) holds every Render env var.

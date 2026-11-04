@@ -174,8 +174,9 @@ def remove_file(
     decision: str,
     reason: str,
     post_status: str | None = None,
+    now: datetime | None = None,
 ) -> None:
-    """Delete the object from R2 and record why. Commits."""
+    """Delete the object from R2 and record why. Commits. `now`: the cleanup pass's clock."""
     try:
         storage.delete(media.object_key)
     except (BotoCoreError, ClientError) as exc:
@@ -183,7 +184,7 @@ def remove_file(
         log.warning("R2 delete failed for %s: %s", media.object_key, exc)
         raise
     media.state = state
-    media.purged_at = utcnow()
+    media.purged_at = now or utcnow()
     media.next_check_at = None
     if post_status:
         media.last_post_status = post_status

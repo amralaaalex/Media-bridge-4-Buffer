@@ -55,7 +55,9 @@ def _expire(db: Session, now: datetime) -> None:
     for f in expired:
         reason = "never_posted" if f.state == FileState.UPLOADED else "ttl"
         try:
-            media.remove_file(db, f, state=FileState.EXPIRED, decision="expire", reason=reason)
+            media.remove_file(
+                db, f, state=FileState.EXPIRED, decision="expire", reason=reason, now=now
+            )
         except (BotoCoreError, ClientError):
             db.rollback()
             f.next_check_at = now + timedelta(minutes=15)
@@ -125,7 +127,7 @@ def _apply(db: Session, f: MediaFile, posts: dict, now: datetime) -> None:
     try:
         if post is None:
             media.remove_file(
-                db, f, state=FileState.PURGED, decision="purge", reason="post_deleted"
+                db, f, state=FileState.PURGED, decision="purge", reason="post_deleted", now=now
             )
             return
         if post is _UNKNOWN:
@@ -139,6 +141,7 @@ def _apply(db: Session, f: MediaFile, posts: dict, now: datetime) -> None:
                 decision="purge",
                 reason="post_sent",
                 post_status=post["status"],
+                now=now,
             )
             return
         else:

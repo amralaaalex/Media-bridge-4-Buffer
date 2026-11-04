@@ -5,7 +5,7 @@ Run from the repo root, with the dev server already up on https://localhost:8000
     uv run --with playwright python .claude/skills/run-media-bridge/driver.py shots
     uv run --with playwright python .claude/skills/run-media-bridge/driver.py draft-flow
 
-shots       landing, /privacy, app page (empty + filled composer) at desktop 1280 and
+shots       landing, /privacy, /stats, app page (empty + filled composer) at desktop 1280 and
             mobile 390 widths, light + dark. Nothing is sent to Buffer.
 draft-flow  uploads a generated PNG through the composer as a Buffer *draft* (never
             publishes), then clicks "Delete now". Prints the Buffer post id so the
@@ -67,7 +67,7 @@ def cmd_shots(browser, args, image, errors):
             )
             page = ctx.new_page()
             watch_errors(page, errors)
-            for path, label in (("/", "landing"), ("/privacy", "privacy")):
+            for path, label in (("/", "landing"), ("/privacy", "privacy"), ("/stats", "stats")):
                 page.goto(args.base + path)
                 page.screenshot(path=OUT / f"{label}-{name}-{scheme}.png", full_page=True)
             ctx.add_cookies(

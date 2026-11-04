@@ -66,6 +66,7 @@ Python's default file encoding here is cp1252. When editing files from scripts, 
   - The JS calls only the JSON API (`/api/files`, `/api/files/{id}/post`, `/api/files/{id}/delete`, `/api/channels`, `/api/account/delete`) and turns states into plain-language copy in `describe()`.
   - CSS colours are tokens on `:root`, with a dark-mode override. `[hidden]` is forced to `display: none` because component `display` rules would otherwise beat it.
 - **Running, screenshotting and driving the UI** is covered by the project skill `/run-media-bridge` (`.claude/skills/run-media-bridge/`). Its `driver.py` drives the installed Edge via Playwright, and its gotchas section covers stale `--reload`, the forged session cookie and Buffer quota costs.
+- `app/stats.py` computes the public, anonymous aggregates for `/stats` and `/api/stats`. "Status checks per post" counts `CleanupEvent`s with reason `status_*`, `post_sent` or `post_deleted`. The chart (`app/static/stats.js`) uses the `--chart-bar` token, validated light (`#0d8f7f`) and dark (`#27ab99`) with the dataviz `validate_palette.js`. Don't swap in the brighter accent.
 - `scripts/cli.py` handles `post` / `files` / `check [--force]` / `delete` as the first DB user. Use it for live tests.
 - `app/main.py` holds the routes. The OAuth `state` and PKCE verifier travel in the Fernet-encrypted `oauth_tx` cookie, and the logged-in user id is kept in Starlette's signed session cookie.
 

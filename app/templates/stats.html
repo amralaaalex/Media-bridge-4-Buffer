@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Stats · media-bridge{% endblock %}
+{% block main_class %}container wide{% endblock %}
+{% macro size(b) -%}
+  {%- if b < 1024 * 1024 %}{{ (b / 1024) | round | int }} KB{% else %}{{ '%.1f' | format(b / 1024 / 1024) }} MB{% endif -%}
+{%- endmacro %}
+{% block content %}
+<section class="stats-head">
+  <h1>How media-bridge is doing</h1>
+  <p class="muted">Live numbers across everyone using it. No personal data, just counts.</p>
+</section>
+
+<section class="hero-stat card">
+  {% if stats.median_minutes_to_delete is not none %}
+  <p class="hero-number">{{ '%g' | format(stats.median_minutes_to_delete) }}<span> min</span></p>
+  <p class="hero-label">Median time between a post going out and its image being deleted</p>
+  {% else %}
+  <p class="hero-number">–</p>
+  <p class="hero-label">Median time between a post going out and its image being deleted (no published posts yet)</p>
+  {% endif %}
+</section>
+
+<section class="tiles" aria-label="Totals">
+  <div class="tile card"><p class="tile-value">{{ stats.uploaded }}</p><p class="tile-label">Images uploaded</p></div>
+  <div class="tile card"><p class="tile-value">{{ stats.published_then_deleted }}</p><p class="tile-label">Published, then deleted</p></div>
+  <div class="tile card"><p class="tile-value">{{ stats.held_now }}</p><p class="tile-label">Waiting for their post right now</p></div>
+  <div class="tile card"><p class="tile-value">{{ size(stats.bytes_removed) }}</p><p class="tile-label">Storage freed</p></div>
+  <div class="tile card">
+    <p class="tile-value">{{ stats.status_checks_per_post if stats.status_checks_per_post is not none else '–' }}</p>
+    <p class="tile-label">Buffer status checks per post</p>
+  </div>
+</section>
+
+<section class="card chart-card" aria-labelledby="daily-title">
+  <div class="card-head">
+    <h2 id="daily-title" class="card-title">Images uploaded per day</h2>
+    <span class="muted fine-inline">Last 14 days, UTC</span>
+  </div>
+  <div class="chart-wrap">
+    <div class="chart" id="daily-chart" role="img" aria-label="Bar chart of images uploaded per day over the last 14 days"></div>
+    <div class="chart-tip" id="chart-tip" role="status" hidden></div>
+  </div>
+  <details class="table-view">
+    <summary>Show as table</summary>
+    <table>
+      <thead><tr><th scope="col">Day</th><th scope="col">Images uploaded</th></tr></thead>
+      <tbody>
+        {% for d in stats.daily_uploads %}<tr><td>{{ d.date }}</td><td>{{ d.count }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </details>
+</section>
+
+<section class="card prose narrow-ish">
+  <h2>What these mean</h2>
+  <ul>
+    <li><strong>Median time to delete</strong>: how long a published image stays online after Buffer sends its post. The cleanup job wakes at each post's due time instead of polling, so this stays at a couple of minutes.</li>
+    <li><strong>Buffer status checks per post</strong>: how many times we ask Buffer about a post before we're done with it. Around 1 means one check per post. Checks are batched, up to 30 posts per API request, so actual API calls are fewer still.</li>
+    <li><strong>Storage freed</strong>: the total size of images we deleted, because the post no longer needed them.</li>
+  </ul>
+  <p class="fine">Updated {{ stats.generated_at[:16] | replace('T', ' ') }} UTC · <a href="/api/stats">JSON</a></p>
+</section>
+{% endblock %}
+{% block scripts %}
+<script id="daily-data" type="application/json">{{ stats.daily_uploads | tojson }}</script>
+<script src="{{ url_for('static', path='stats.js') }}" defer></script>
+{% endblock %}
