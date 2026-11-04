@@ -41,6 +41,9 @@ Python's default file encoding here is cp1252. When editing files from scripts, 
 
 ## Deploy (Render)
 
+**Production: https://media-bridge-b4qm.onrender.com.** It auto-deploys on every push to `main`.
+
+
 - `render.yaml` is a Blueprint: native Python runtime (no Docker) in Frankfurt.
   - Build: `pip install uv && uv sync --frozen --no-dev`.
   - Start: `uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers`.

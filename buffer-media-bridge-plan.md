@@ -303,8 +303,8 @@ Owner tags: **[YOU]** means Amr does it (accounts, setup, content, recording). *
   - `main` still holds the test files and a copy of Amr's Buffer refresh token, which `dev` also has.
   - Refresh tokens are single-use, so if both copies ever refresh, Buffer revokes the grant.
   - Truncate `cleanup_events`, `media_files`, `oauth_tokens` and `users` on `main`. Production users log in fresh on the deployed app.
-- [ ] [YOU] Deploy. Set the env vars on the host (the `.env` values with the Postgres URL, and `BUFFER_REDIRECT_URI` / `APP_BASE_URL` set to the production URL).
-- [ ] [YOU] App client: add the production redirect URI `https://<app-domain>/callback`, the logo and the privacy policy URL (`/privacy`).
+- [x] [YOU] Deploy. **Live at https://media-bridge-b4qm.onrender.com** (2026-11-04). Set the env vars on the host (the `.env` values with the Postgres URL, and `BUFFER_REDIRECT_URI` / `APP_BASE_URL` set to the production URL).
+- [x] [YOU] App client: add the production redirect URI (`https://media-bridge-b4qm.onrender.com/callback`; Amr logged in on prod successfully) `https://<app-domain>/callback`, the logo and the privacy policy URL (`/privacy`).
 - [ ] [YOU] R2: attach the custom domain and update `R2_PUBLIC_BASE_URL` (if a domain is used).
 - [ ] [CC + YOU] End-to-end test on production using the **second Buffer account**.
 - [ ] [CC] Rate-limit review of the cleanup job against real usage.
@@ -347,6 +347,9 @@ Buffer slack: Nov 13 is the hard deadline; the plan leaves one day of margin.
 - 2026-11-03: Designed "Leash" scoped-token gateway; judged too complex / low roadmap demand (4 votes).
 - 2026-11-04: **Chose media hosting as the core feature.** Keep it simple. Leash parked as a late add-on.
 - 2026-11-04: Verified contest rules on the official page; confirmed submission needs app link + write-up + demo video, registration required, service must stay up through judging (to Dec 7).
+- 2026-11-04: **Deployed to Render: https://media-bridge-b4qm.onrender.com** (the plain `media-bridge` name was taken).
+  - Smoke-tested: all pages return 200, links are https behind the proxy, and the login `redirect_uri` is correct.
+  - Amr logged in on prod and a refresh token was stored. The startup column-add created `agent_keys`, `original_name` and `post_url` on `main`.
 - 2026-11-04: Agent access uses a **prompt instead of an MCP server**. Agents upload local files with `curl -F`, which avoids base64 images in tool arguments and works in Claude Code, Cursor, Codex and others. Keys can't manage keys; that needs the browser session.
 - 2026-11-04: Hosting is **Render**, native Python runtime, on the default `media-bridge.onrender.com` URL with no custom domain, so R2 stays on r2.dev for now.
   - The start command was verified locally with `uv sync --frozen --no-dev`.
