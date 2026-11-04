@@ -102,3 +102,62 @@ def get_account(http: httpx.Client, access_token: str) -> dict:
 def get_channels(http: httpx.Client, access_token: str, organization_id: str) -> list[dict]:
     data = graphql(http, access_token, CHANNELS_QUERY, {"organizationId": organization_id})
     return data["channels"]
+
+
+CREATE_POST_MUTATION = """
+mutation CreatePost($input: CreatePostInput!) {
+  createPost(input: $input) {
+    ... on PostActionSuccess { post { id status dueAt } }
+    ... on MutationError { message }
+  }
+}
+"""
+
+POST_QUERY = """
+query Post($id: PostId!) {
+  post(input: { id: $id }) { id status dueAt sentAt externalLink error { message } }
+}
+"""
+
+
+class BufferPostRejected(BufferError):
+    """createPost returned a typed MutationError (bad channel, limit reached, bad media...)."""
+
+
+def create_post(
+    http: httpx.Client,
+    access_token: str,
+    *,
+    channel_id: str,
+    text: str,
+    image_url: str,
+    alt_text: str | None = None,
+    due_at: str | None = None,
+    draft: bool = False,
+) -> dict:
+    """Create an image post. `due_at` (ISO 8601) schedules it; otherwise it joins the queue.
+
+    Not retried on failure: createPost has no idempotency key, so a retry after a timeout
+    could publish twice.
+    """
+    image: dict = {"url": image_url}
+    if alt_text:
+        image["metadata"] = {"altText": alt_text}
+    post_input = {
+        "channelId": channel_id,
+        "text": text,
+        "schedulingType": "automatic",
+        "mode": "customScheduled" if due_at else "addToQueue",
+        "assets": [{"image": image}],
+        "saveToDraft": draft,
+    }
+    if due_at:
+        post_input["dueAt"] = due_at
+    result = graphql(http, access_token, CREATE_POST_MUTATION, {"input": post_input})["createPost"]
+    if "post" not in result:
+        raise BufferPostRejected(result.get("message", "Buffer rejected the post"))
+    return result["post"]
+
+
+def get_post(http: httpx.Client, access_token: str, post_id: str) -> dict:
+    return graphql(http, access_token, POST_QUERY, {"id": post_id})["post"]

@@ -33,6 +33,8 @@ Tests set their env vars in `tests/conftest.py` before importing `app.*`, becaus
 
 - `app/oauth.py` handles PKCE, the code exchange and `get_access_token()`. That function is the **only** place tokens are refreshed (see the rotation rules below).
 - `app/buffer_client.py` holds the `graphql()` helper, typed errors (`BufferUnauthorized`, `BufferRateLimited`) and the module-level `rate_limits` state parsed from the `RateLimit` header.
+- `app/storage.py` uploads to and deletes from R2 with boto3 (S3 API). Keys are `uuid4.ext`, and public URLs come from `R2_PUBLIC_BASE_URL`.
+- `scripts/smoke_test.py` (`uv run python -m scripts.smoke_test`) runs the live end-to-end check: dummy PNG → R2 → Buffer **draft** on the first channel, using the first logged-in user in the local DB.
 - `app/main.py` holds the routes. The OAuth `state` and PKCE verifier travel in the Fernet-encrypted `oauth_tx` cookie, and the logged-in user id is kept in Starlette's signed session cookie.
 
 ## What is being built
@@ -49,7 +51,7 @@ A small service for the Buffer Commit contest (submission deadline **Nov 13, 202
 
 ## Hard constraints
 
-- **Rate limits are per client and shared by all users, including judges.** The contest handbook gives about 100 requests per 15 minutes and 250 per 24 hours.
+- **Rate limits are per client and shared by all users, including judges.** Measured live: 110 per 15 minutes, 525 per 24 hours and 15,100 per 30 days with 1 user, growing per authorized user. The handbook says 250 a day, so stay conservative.
   - The cleanup job polls only files past their `due_at`.
   - It batches up to 30 aliased `post(id)` lookups per request.
   - It caches the org and channels, honors `Retry-After` on 429, and throttles using the `RateLimit` header.

@@ -173,8 +173,9 @@ Resolved on 2026-11-04 from the developer handbook and docs. Details are in sect
 
 Still open (test empirically):
 - [ ] Image format and size limits. The docs list none, and Buffer resolves dimensions itself. Try a large PNG, a large JPEG and a WebP against each target network.
+- [x] `needsApproval` is not required: createPost succeeded without it (2026-11-04).
+- [x] Drafts do fetch the URL at create time: Buffer resolved 1200x627 for a `saveToDraft` post.
 - [ ] What `post(input:{id})` returns after a post is deleted in Buffer. Probably a top-level `errors[]` entry with `NOT_FOUND` and null `data`. Test it, because one failing alias may null the whole aliased response.
-- [ ] Whether `saveToDraft: true` drafts still trigger a fetch of the URL at create time. They should, since dimensions are resolved.
 
 ## 6a. Buffer API facts (from handbook + docs, 2026-11-04)
 
@@ -256,9 +257,9 @@ Status key: `[ ]` todo, `[~]` in progress, `[x]` done, `[-]` dropped. Update as 
 - [x] Local HTTPS for dev (mkcert or a self-signed cert with `uvicorn --ssl-keyfile/--ssl-certfile`).
 - [~] Repo skeleton: FastAPI app, config via env vars (done); Dockerfile and README stub still to do.
 - [x] OAuth flow with PKCE (S256) and `offline_access`: login → callback (verify `state`) → store encrypted tokens → single-owner rotating refresh helper.
-- [~] Buffer client module (`graphql()`, `get_account()` and `get_channels()` done): `get_channels()`, `create_post(channel_id, text, image_url, scheduled_at | draft)`, `get_post(post_id)`.
-- [ ] R2 bucket + upload helper returning public URL.
-- [ ] Smoke test: upload a file manually, create a draft post with it, see it in Buffer.
+- [x] Buffer client module: `get_channels()`, `create_post(channel_id, text, image_url, scheduled_at | draft)`, `get_post(post_id)`.
+- [x] R2 bucket + upload helper returning public URL (`app/storage.py`, public `r2.dev` URL for now; switch to a custom domain before judging).
+- [x] Smoke test: upload a file manually, create a draft post with it, see it in Buffer (`scripts/smoke_test.py`).
 
 ### Day 3–4 (Nov 6–7): lifecycle
 - [ ] Postgres schema (section 5) + migrations.
@@ -325,6 +326,9 @@ Buffer slack: Nov 13 is the hard deadline; the plan leaves one day of margin.
 - 2026-11-03: Designed "Leash" scoped-token gateway; judged too complex / low roadmap demand (4 votes).
 - 2026-11-04: **Chose media hosting as the core feature.** Keep it simple. Leash parked as a late add-on.
 - 2026-11-04: Verified contest rules on the official page; confirmed submission needs app link + write-up + demo video, registration required, service must stay up through judging (to Dec 7).
+- 2026-11-04: Smoke test passed. A dummy PNG went to R2, and a LinkedIn draft was created with the image and alt text attached.
+  - Buffer stores **our URL** as the asset source (`assets[0].source` = the r2.dev URL), not a copy. This confirms the file must outlive the post.
+  - The live app-client quota with 1 user is 110 / 15 min, 525 / 24 h and 15,100 / 30 days. That matches the docs' formula (base + per-user), not the handbook's 250 a day. Keep the cleanup design conservative anyway.
 - 2026-11-04: OAuth verified live against Amr's account; a refresh token was issued. The first attempt failed with `invalid_scope` because `posts:write` wasn't enabled on the client. Check the client's permissions if a judge ever sees that error.
 - 2026-11-04: Day 1 code: uv project, FastAPI, SQLAlchemy (SQLite locally, Postgres in prod), confidential App Client named `media-bridge`. The OAuth tx is held in an encrypted cookie, users are keyed by `buffer_account_id`, and the first org is used.
 - 2026-11-04: Read the developer handbook and the API docs.
