@@ -152,7 +152,7 @@ Budget: about 250 calls a day are shared by every user and by token refreshes. D
 
 ### Data model (initial)
 ```
-users          id, buffer_org_id, created_at, disconnected_at
+users          id, buffer_account_id, buffer_org_id, created_at, disconnected_at
 oauth_tokens   user_id, access_token_enc, refresh_token_enc, expires_at   (refresh under a row lock)
 media_files    id, user_id, object_key, public_url, content_type, size_bytes,
                buffer_post_id (nullable), channel_id, due_at (nullable),
@@ -229,6 +229,13 @@ createPost(input: {
 - For specific IDs, alias `post(input:{id})` lookups into one query, up to **30 aliases**.
 - Query limits: complexity 175k, depth 25, 15k tokens.
 
+**Amr's dev account (checked via the Buffer MCP, 2026-11-04):**
+- Org "My organization" `6ad197de6393066695630954`, on the Free plan.
+  - Limits: **3 channels, 10 scheduled posts**, 100 ideas.
+  - Timezone Africa/Cairo.
+- One channel: LinkedIn profile "Amr Alaa" `6aeaf8e8e29c69a1715a60d9`. This is the **real public profile**, so test with `saveToDraft: true`. Consider adding a throwaway second channel for publish tests (e.g. Bluesky or Mastodon).
+- The MCP draws on the personal quota: 150 / 15 min, 600 / 24 h, 1,000 / 30 days. That is separate from the app client's quota.
+
 **Rate limits (the binding constraint for cleanup):**
 - The contest handbook gives the Free tier as **100 / 15 min, 250 / 24 h, 3,000 / 30 days, per client, shared by all users including judges**.
 - The docs give a base of 100 / 500 / 15,000, plus +10 / +25 / +100 per authorized user.
@@ -245,11 +252,11 @@ Status key: `[ ]` todo, `[~]` in progress, `[x]` done, `[-]` dropped. Update as 
 - [ ] Read the builder handbook and the terms; note anything that changes this plan in the "Decisions log".
 - [ ] Join the contest Discord and post a one-line "what I'm building" intro (first build-in-public post).
 - [x] Read the handbook (saved locally, gitignored) and the API guides. Findings are in section 6a.
-- [ ] Register a Buffer App Client (Private), get the client id and secret, and add both redirect URIs: `https://localhost:8000/callback` plus the production URL.
-- [ ] Local HTTPS for dev (mkcert or a self-signed cert with `uvicorn --ssl-keyfile/--ssl-certfile`).
-- [ ] Repo skeleton: FastAPI app, config via env vars, Dockerfile, README stub.
-- [ ] OAuth flow with PKCE (S256) and `offline_access`: login → callback (verify `state`) → store encrypted tokens → single-owner rotating refresh helper.
-- [ ] Buffer client module: `get_channels()`, `create_post(channel_id, text, image_url, scheduled_at | draft)`, `get_post(post_id)`.
+- [x] Register a Buffer App Client (Private), get the client id and secret, and add both redirect URIs: `https://localhost:8000/callback` plus the production URL.
+- [x] Local HTTPS for dev (mkcert or a self-signed cert with `uvicorn --ssl-keyfile/--ssl-certfile`).
+- [~] Repo skeleton: FastAPI app, config via env vars (done); Dockerfile and README stub still to do.
+- [x] OAuth flow with PKCE (S256) and `offline_access`: login → callback (verify `state`) → store encrypted tokens → single-owner rotating refresh helper.
+- [~] Buffer client module (`graphql()`, `get_account()` and `get_channels()` done): `get_channels()`, `create_post(channel_id, text, image_url, scheduled_at | draft)`, `get_post(post_id)`.
 - [ ] R2 bucket + upload helper returning public URL.
 - [ ] Smoke test: upload a file manually, create a draft post with it, see it in Buffer.
 
@@ -318,6 +325,8 @@ Buffer slack: Nov 13 is the hard deadline; the plan leaves one day of margin.
 - 2026-11-03: Designed "Leash" scoped-token gateway; judged too complex / low roadmap demand (4 votes).
 - 2026-11-04: **Chose media hosting as the core feature.** Keep it simple. Leash parked as a late add-on.
 - 2026-11-04: Verified contest rules on the official page; confirmed submission needs app link + write-up + demo video, registration required, service must stay up through judging (to Dec 7).
+- 2026-11-04: OAuth verified live against Amr's account; a refresh token was issued. The first attempt failed with `invalid_scope` because `posts:write` wasn't enabled on the client. Check the client's permissions if a judge ever sees that error.
+- 2026-11-04: Day 1 code: uv project, FastAPI, SQLAlchemy (SQLite locally, Postgres in prod), confidential App Client named `media-bridge`. The OAuth tx is held in an encrypted cookie, users are keyed by `buffer_account_id`, and the first org is used.
 - 2026-11-04: Read the developer handbook and the API docs.
   - Buffer fetches media at publish time, which confirms the core value.
   - Rate limits are per client and shared, about 250 a day per the handbook, so cleanup polls only due files with batched aliased lookups.

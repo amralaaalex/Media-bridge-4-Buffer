@@ -2,11 +2,38 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Current state
+## Project plan
 
-No code exists yet. The only source of truth is `buffer-media-bridge-plan.md`: it holds the objective, contest rules, scope, architecture, open questions, the day-by-day task plan, and a decisions log. Read it before starting any work. When you finish work, update it: tick task statuses (`[ ]` / `[~]` / `[x]` / `[-]`) in section 7, tick the unknowns in section 6 as they are verified, and add dated entries to the Decisions log (section 10).
+`buffer-media-bridge-plan.md` is the source of truth. It holds the objective, contest rules, scope, architecture, Buffer API facts (section 6a), the day-by-day task plan, and a decisions log. Read it before starting any work. When you finish work, update it:
+- Tick task statuses (`[ ]` / `[~]` / `[x]` / `[-]`) in section 7.
+- Tick the unknowns in section 6 as they are verified.
+- Add dated entries to the Decisions log (section 10).
 
-When the repo skeleton is created, add the real build, run, test and lint commands to this file. Until then, don't assume any.
+## Commands
+
+The project uses uv (Python ≥3.12). Secrets live in `.env`, which is gitignored. `.env.example` is the template.
+
+```sh
+uv sync                                   # install deps
+uv run pytest                             # all tests
+uv run pytest tests/test_oauth.py::test_failed_refresh_disconnects_and_is_not_retried  # one test
+uv run ruff check . && uv run ruff format .
+# dev server — Buffer requires HTTPS even on localhost; certs/ is a gitignored self-signed pair
+uv run uvicorn app.main:app --port 8000 --ssl-keyfile certs/key.pem --ssl-certfile certs/cert.pem --reload
+```
+
+Regenerate the dev certificate with:
+`openssl req -x509 -newkey rsa:2048 -nodes -days 365 -subj "//CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" -keyout certs/key.pem -out certs/cert.pem`
+
+Local dev uses `DATABASE_URL=sqlite:///./dev.db`. Production uses `postgresql+psycopg://…`. Tables are created by `init_db()` on startup; there are no migrations yet.
+
+Tests set their env vars in `tests/conftest.py` before importing `app.*`, because `app/db.py` builds the engine at import time. Buffer HTTP calls are faked with `httpx.MockTransport`. The app passes one shared `httpx.Client` into the functions that call Buffer, so tests can swap it.
+
+## Code map
+
+- `app/oauth.py` handles PKCE, the code exchange and `get_access_token()`. That function is the **only** place tokens are refreshed (see the rotation rules below).
+- `app/buffer_client.py` holds the `graphql()` helper, typed errors (`BufferUnauthorized`, `BufferRateLimited`) and the module-level `rate_limits` state parsed from the `RateLimit` header.
+- `app/main.py` holds the routes. The OAuth `state` and PKCE verifier travel in the Fernet-encrypted `oauth_tx` cookie, and the logged-in user id is kept in Starlette's signed session cookie.
 
 ## What is being built
 
