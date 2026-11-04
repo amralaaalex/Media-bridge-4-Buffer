@@ -293,3 +293,32 @@ def test_stats_count_lifecycle_and_checks(db, buffer, user, r2):
     assert s["status_checks_per_post"] == 0.5  # 1 lookup so far / 2 posts (the other is not due)
     assert sum(d["count"] for d in s["daily_uploads"]) == 3
     assert len(s["daily_uploads"]) == 14
+
+
+def test_agent_key_auth_and_revocation(db, buffer, user, r2):
+    from app import agent_keys
+    from app.db import AgentKey
+    from app.main import app, get_http
+
+    row, key = agent_keys.create(db, user)
+    assert key.startswith("mb_") and row.prefix == key[:9] and key not in row.key_hash
+    app.dependency_overrides[get_http] = lambda: buffer.http
+    try:
+        with TestClient(app, base_url="https://testserver") as client:
+            auth = {"Authorization": f"Bearer {key}"}
+            up = client.post(
+                "/api/files", files={"file": ("a.png", dummy_png(10, 10))}, headers=auth
+            )
+            assert up.status_code == 201, up.text
+            fid = up.json()["id"]
+            assert client.get(f"/api/files/{fid}", headers=auth).json()["original_name"] == "a.png"
+            # A key can't manage keys: that needs the browser login.
+            assert client.post("/api/agent-keys", headers=auth).status_code == 401
+            bad = {"Authorization": "Bearer mb_not-a-real-key"}
+            assert client.get("/api/files", headers=bad).status_code == 401
+            assert agent_keys.revoke(db, user, row.id)
+            assert client.get("/api/files", headers=auth).status_code == 401
+    finally:
+        app.dependency_overrides.clear()
+    db.expunge_all()
+    assert db.get(AgentKey, row.id).last_used_at is not None

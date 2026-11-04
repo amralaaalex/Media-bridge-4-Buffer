@@ -497,9 +497,143 @@
     }
   });
 
+  // --- Agent access ---------------------------------------------------------------
+
+  const KEY_SLOT = "\u0000KEY\u0000";
+  let agentKey = null; // the full key, only in memory and only right after creating it
+
+  function agentPrompt(key) {
+    const base = window.MB.baseUrl;
+    const local = /^https:\/\/(localhost|127\.0\.0\.1)/.test(base);
+    const k = local ? "-k " : "";
+    return [
+      "You can post images to my Buffer channels through media-bridge, a service built on the Buffer API. It hosts each image until Buffer publishes the post, then deletes it.",
+      "",
+      "## Connection",
+      `Base URL: ${base}`,
+      `API key: ${key}`,
+      "Send `Authorization: Bearer <API key>` on every request. Keep the key secret: don't print it back to me or write it into files in a repo. Put it in an environment variable named MEDIA_BRIDGE_KEY and use that.",
+      ...(local ? ["This is a local server with a self-signed certificate, so add -k to curl."] : []),
+      "",
+      "## Endpoints",
+      "1. List my channels: GET /api/channels -> [{id, name, displayName, service}]",
+      `2. Upload an image (JPEG, PNG, GIF or WebP, up to ${window.MB.maxUploadMb} MB): POST /api/files as multipart form field "file" -> {id, state: "UPLOADED", ...}`,
+      '3. Create the Buffer post for that upload: POST /api/files/{id}/post with JSON {"channel_id", "text", "alt_text", "mode", "due_at"}',
+      '   mode is "draft", "queue", "schedule" or "now". due_at is only for "schedule": ISO 8601 with a UTC offset, e.g. "2026-11-20T09:00:00+02:00".',
+      "4. Check a file: GET /api/files/{id} -> state (UPLOADED, HELD, PURGED, EXPIRED), post_status, due_at, post_url",
+      "5. Delete a file now: POST /api/files/{id}/delete",
+      'Errors come back as {"detail": "..."}. Show me that message.',
+      "",
+      "## Example",
+      `curl ${k}-s -H "Authorization: Bearer $MEDIA_BRIDGE_KEY" ${base}/api/channels`,
+      `curl ${k}-s -H "Authorization: Bearer $MEDIA_BRIDGE_KEY" -F "file=@./image.png" ${base}/api/files`,
+      `curl ${k}-s -H "Authorization: Bearer $MEDIA_BRIDGE_KEY" -H "Content-Type: application/json" -d '{"channel_id":"CHANNEL_ID","text":"Hello","alt_text":"What the image shows","mode":"draft"}' ${base}/api/files/FILE_ID/post`,
+      "",
+      "## Rules",
+      '- "now", "queue" and "schedule" publish publicly. Confirm the channel, text and time with me before using them. Use "draft" when unsure.',
+      "- Always write alt text that describes the image.",
+      "- One post per uploaded file.",
+      "- After a post is published, media-bridge deletes its image automatically. You don't need to clean up.",
+      "",
+      "To confirm you're connected, list my channels and tell me their names.",
+    ].join("\n");
+  }
+
+  function renderPrompt() {
+    const pre = $("agent-prompt");
+    pre.textContent = "";
+    const [before, after] = agentPrompt(KEY_SLOT).split(KEY_SLOT);
+    pre.append(before);
+    if (agentKey) {
+      pre.append(agentKey);
+    } else {
+      const slot = document.createElement("span");
+      slot.className = "placeholder";
+      slot.textContent = "<click Create agent key>";
+      pre.append(slot);
+    }
+    pre.append(after);
+    $("copy-prompt").disabled = !agentKey;
+  }
+
+  $("create-key").addEventListener("click", async () => {
+    const btn = $("create-key");
+    btn.disabled = true;
+    btn.classList.add("busy");
+    try {
+      const created = await api("/api/agent-keys", { method: "POST" });
+      agentKey = created.key;
+      renderPrompt();
+      $("key-note").textContent =
+        "Your new key is in the prompt above. It won't be shown again, so copy the prompt now. Anyone with the key can post to your Buffer channels through media-bridge; revoke it below if it leaks.";
+      toast("Agent key created. Copy the prompt now; the key won't be shown again.");
+      loadKeys();
+    } catch (err) {
+      toast(err.message);
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove("busy");
+    }
+  });
+
+  $("copy-prompt").addEventListener("click", async () => {
+    if (!agentKey) return;
+    const text = agentPrompt(agentKey);
+    try {
+      await navigator.clipboard.writeText(text);
+      toast("Prompt copied. Paste it into your agent's chat.");
+    } catch {
+      // Clipboard API blocked: select the text so Ctrl/Cmd+C works.
+      const range = document.createRange();
+      range.selectNodeContents($("agent-prompt"));
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      toast("Press Ctrl+C (or Cmd+C) to copy the selected prompt.");
+    }
+  });
+
+  async function loadKeys() {
+    let keys = [];
+    try {
+      keys = await api("/api/agent-keys");
+    } catch {
+      return;
+    }
+    $("keys-section").hidden = keys.length === 0;
+    const list = $("key-list");
+    list.innerHTML = "";
+    for (const k of keys) {
+      const li = document.createElement("li");
+      const code = document.createElement("code");
+      code.textContent = `${k.prefix}…`;
+      const info = document.createElement("span");
+      info.className = "muted";
+      info.textContent = `Created ${when(k.created_at)} · ${k.last_used_at ? `last used ${relative(k.last_used_at)}` : "not used yet"}`;
+      const revoke = document.createElement("button");
+      revoke.type = "button";
+      revoke.className = "link";
+      revoke.textContent = "Revoke";
+      revoke.addEventListener("click", async () => {
+        if (!confirm(`Revoke key ${k.prefix}…? Agents using it will stop working immediately.`)) return;
+        try {
+          await api(`/api/agent-keys/${k.id}/revoke`, { method: "POST" });
+          toast("Key revoked.");
+        } catch (err) {
+          toast(err.message);
+        }
+        loadKeys();
+      });
+      li.append(code, info, revoke);
+      list.append(li);
+    }
+  }
+
   // --- Start ----------------------------------------------------------------------
 
   syncMode();
   loadChannels().then(renderFiles); // channel names appear in the file list
   loadFiles();
+  renderPrompt();
+  loadKeys();
 })();

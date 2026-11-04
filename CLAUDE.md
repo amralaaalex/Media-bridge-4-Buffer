@@ -67,6 +67,10 @@ Python's default file encoding here is cp1252. When editing files from scripts, 
   - CSS colours are tokens on `:root`, with a dark-mode override. `[hidden]` is forced to `display: none` because component `display` rules would otherwise beat it.
 - **Running, screenshotting and driving the UI** is covered by the project skill `/run-media-bridge` (`.claude/skills/run-media-bridge/`). Its `driver.py` drives the installed Edge via Playwright, and its gotchas section covers stale `--reload`, the forged session cookie and Buffer quota costs.
 - `app/stats.py` computes the public, anonymous aggregates for `/stats` and `/api/stats`. "Status checks per post" counts `CleanupEvent`s with reason `status_*`, `post_sent` or `post_deleted`. The chart (`app/static/stats.js`) uses the `--chart-bar` token, validated light (`#0d8f7f`) and dark (`#27ab99`) with the dataviz `validate_palette.js`. Don't swap in the brighter accent.
+- `app/agent_keys.py` handles agent keys (`mb_` + 32 random bytes). Only the SHA-256 is stored, and the key is shown once.
+  - `require_user` accepts `Authorization: Bearer mb_…` or the session cookie.
+  - `require_session_user` (key management) accepts the session **only**, so a leaked key can't mint keys.
+  - The copy-paste agent prompt is built client-side in `agentPrompt()` in `app/static/app.js`. If an API route changes, update that prompt too: agents follow it literally.
 - `scripts/cli.py` handles `post` / `files` / `check [--force]` / `delete` as the first DB user. Use it for live tests.
 - `app/main.py` holds the routes. The OAuth `state` and PKCE verifier travel in the Fernet-encrypted `oauth_tx` cookie, and the logged-in user id is kept in Starlette's signed session cookie.
 

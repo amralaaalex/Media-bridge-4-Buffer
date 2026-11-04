@@ -100,6 +100,20 @@ class MediaFile(Base):
     purged_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
 
+class AgentKey(Base):
+    """API key an agent sends as `Authorization: Bearer mb_...`. Only its hash is stored."""
+
+    __tablename__ = "agent_keys"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    prefix: Mapped[str] = mapped_column(String(16))  # shown in the UI to tell keys apart
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    last_used_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+
 class CleanupEvent(Base):
     """Audit trail of every lifecycle decision; also feeds the stats page."""
 

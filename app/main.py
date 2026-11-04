@@ -17,11 +17,20 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
-from app import buffer_client, media, oauth, stats
+from app import agent_keys, buffer_client, media, oauth, stats
 from app.cleanup import CleanupWorker
 from app.config import get_settings
 from app.crypto import InvalidToken, decrypt, encrypt
-from app.db import CleanupEvent, FileState, MediaFile, OAuthToken, User, get_db, init_db
+from app.db import (
+    AgentKey,
+    CleanupEvent,
+    FileState,
+    MediaFile,
+    OAuthToken,
+    User,
+    get_db,
+    init_db,
+)
 
 # Uvicorn only configures its own loggers; this makes app.* (e.g. cleanup) show up too.
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -105,6 +114,7 @@ def index(request: Request, db: DB):
             "max_upload_mb": s.max_upload_mb,
             "unattached_ttl_hours": s.unattached_ttl_hours,
             "media_ttl_days": s.media_ttl_days,
+            "base_url": s.app_base_url.rstrip("/"),
         },
     )
 
@@ -215,6 +225,21 @@ def logout(request: Request):
 
 
 def require_user(request: Request, db: DB) -> User:
+    """The browser session's user, or an agent's via `Authorization: Bearer mb_...`."""
+    auth = request.headers.get("authorization", "")
+    if auth[:7].lower() == "bearer ":
+        user = agent_keys.authenticate(db, auth[7:].strip())
+        if user is None:
+            raise HTTPException(401, "Invalid or revoked agent key.")
+    else:
+        user = current_user(request, db)
+    if user is None or user.disconnected_at is not None:
+        raise HTTPException(401, "Connect your Buffer account first.")
+    return user
+
+
+def require_session_user(request: Request, db: DB) -> User:
+    """Browser login only: an agent key must never be able to mint or revoke keys."""
     user = current_user(request, db)
     if user is None or user.disconnected_at is not None:
         raise HTTPException(401, "Connect your Buffer account first.")
@@ -222,6 +247,7 @@ def require_user(request: Request, db: DB) -> User:
 
 
 CurrentUser = Annotated[User, Depends(require_user)]
+SessionUser = Annotated[User, Depends(require_session_user)]
 
 
 def _owned_file(db: Session, user: User, file_id: str) -> MediaFile:
@@ -272,6 +298,44 @@ def list_files(db: DB, user: CurrentUser) -> list[dict]:
         ).all()
     )
     return [_file_json(f, reasons.get(f.id)) for f in files]
+
+
+@app.get("/api/files/{file_id}")
+def get_file(file_id: str, db: DB, user: CurrentUser) -> dict:
+    f = _owned_file(db, user, file_id)
+    reason = db.execute(
+        select(CleanupEvent.reason).where(
+            CleanupEvent.media_file_id == f.id, CleanupEvent.decision != "keep"
+        )
+    ).scalar()
+    return _file_json(f, reason)
+
+
+@app.get("/api/agent-keys")
+def list_agent_keys(db: DB, user: SessionUser) -> list[dict]:
+    return [_key_json(k) for k in agent_keys.list_for(db, user)]
+
+
+@app.post("/api/agent-keys", status_code=201)
+def create_agent_key(db: DB, user: SessionUser) -> dict:
+    row, key = agent_keys.create(db, user)
+    return {**_key_json(row), "key": key}  # the only time the full key is returned
+
+
+@app.post("/api/agent-keys/{key_id}/revoke")
+def revoke_agent_key(key_id: int, db: DB, user: SessionUser) -> dict:
+    if not agent_keys.revoke(db, user, key_id):
+        raise HTTPException(404, "Key not found.")
+    return {"revoked": True}
+
+
+def _key_json(k: AgentKey) -> dict:
+    return {
+        "id": k.id,
+        "prefix": k.prefix,
+        "created_at": k.created_at,
+        "last_used_at": k.last_used_at,
+    }
 
 
 @app.get("/api/channels")
@@ -380,6 +444,7 @@ def delete_account(request: Request, db: DB, user: CurrentUser) -> dict:
     db.execute(delete(CleanupEvent).where(CleanupEvent.media_file_id.in_(file_ids)))
     db.execute(delete(MediaFile).where(MediaFile.user_id == user.id))
     db.execute(delete(OAuthToken).where(OAuthToken.user_id == user.id))
+    db.execute(delete(AgentKey).where(AgentKey.user_id == user.id))
     db.execute(delete(User).where(User.id == user.id))
     db.commit()
     _channel_cache.pop(user.id, None)

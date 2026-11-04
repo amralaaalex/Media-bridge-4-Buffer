@@ -13,65 +13,105 @@
 {% block main_class %}container wide{% endblock %}
 {% block content %}
 <div class="layout">
-  <section class="card composer" aria-labelledby="composer-title">
-    <h1 id="composer-title" class="card-title">New post</h1>
+  <div class="col">
+    <section class="card composer" aria-labelledby="composer-title">
+      <h1 id="composer-title" class="card-title">New post</h1>
 
-    <form id="composer" novalidate>
-      <label class="dropzone" id="dropzone">
-        <input type="file" id="file-input" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
-        <div class="dz-empty">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
-          <strong>Drop an image here</strong>
-          <span>or click to choose · JPEG, PNG, GIF, WebP · up to {{ max_upload_mb }} MB</span>
-        </div>
-        <div class="dz-preview" hidden>
-          <img id="preview" alt="">
-          <div class="dz-meta"><span id="file-name"></span><button type="button" class="link" id="change-file">Change</button></div>
-        </div>
-      </label>
+      <form id="composer" novalidate>
+        <label class="dropzone" id="dropzone">
+          <input type="file" id="file-input" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
+          <div class="dz-empty">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+            <strong>Drop an image here</strong>
+            <span>or click to choose · JPEG, PNG, GIF, WebP · up to {{ max_upload_mb }} MB</span>
+          </div>
+          <div class="dz-preview" hidden>
+            <img id="preview" alt="">
+            <div class="dz-meta"><span id="file-name"></span><button type="button" class="link" id="change-file">Change</button></div>
+          </div>
+        </label>
 
-      <fieldset class="field">
-        <legend>Channel</legend>
-        <div class="channels" id="channels" role="radiogroup">
-          <div class="skeleton-row"><span class="skeleton"></span><span class="skeleton"></span></div>
-        </div>
-      </fieldset>
+        <fieldset class="field">
+          <legend>Channel</legend>
+          <div class="channels" id="channels" role="radiogroup">
+            <div class="skeleton-row"><span class="skeleton"></span><span class="skeleton"></span></div>
+          </div>
+        </fieldset>
 
-      <div class="field">
-        <div class="label-row"><label for="text">Caption</label><span class="counter" id="counter">0</span></div>
-        <textarea id="text" rows="4" maxlength="3000" placeholder="What do you want to say?"></textarea>
+        <div class="field">
+          <div class="label-row"><label for="text">Caption</label><span class="counter" id="counter">0</span></div>
+          <textarea id="text" rows="4" maxlength="3000" placeholder="What do you want to say?"></textarea>
+        </div>
+
+        <div class="field">
+          <label for="alt">Alt text <span class="optional">recommended</span></label>
+          <input id="alt" type="text" maxlength="1000" placeholder="Describe the image for people using screen readers">
+        </div>
+
+        <fieldset class="field">
+          <legend>When</legend>
+          <div class="segmented" id="modes">
+            <label><input type="radio" name="mode" value="queue" checked><span>Add to queue</span></label>
+            <label><input type="radio" name="mode" value="schedule"><span>Schedule</span></label>
+            <label><input type="radio" name="mode" value="now"><span>Publish now</span></label>
+            <label><input type="radio" name="mode" value="draft"><span>Draft</span></label>
+          </div>
+          <div class="schedule-row" id="schedule-row" hidden>
+            <input type="datetime-local" id="due-at" aria-label="Publish time">
+            <span class="muted" id="tz-label"></span>
+          </div>
+          <p class="hint" id="mode-hint"></p>
+        </fieldset>
+
+        <p class="form-error" id="form-error" role="alert" hidden></p>
+        <button class="btn btn-primary btn-block" id="submit" type="submit">
+          <span class="spinner" aria-hidden="true"></span><span id="submit-label">Add to queue</span>
+        </button>
+        <p class="fine">
+          We keep this image only until Buffer sends your post, then delete it. Images that are never
+          posted are deleted after {{ unattached_ttl_hours }} hours. <a href="/privacy">How we handle your data</a>
+        </p>
+      </form>
+    </section>
+
+    <section class="card agent" aria-labelledby="agent-title">
+      <div class="agent-head">
+        <div>
+          <h2 id="agent-title" class="card-title">Post from your AI agent</h2>
+          <p class="muted agent-lead">
+            Let Claude Code, Cursor, Codex or any agent that can run <code>curl</code> upload images and
+            create Buffer posts for you. Create a key, copy the prompt, and paste it into your agent's chat.
+          </p>
+        </div>
+        <button class="btn btn-primary" id="create-key" type="button">
+          <span class="spinner" aria-hidden="true"></span><span>Create agent key</span>
+        </button>
       </div>
 
-      <div class="field">
-        <label for="alt">Alt text <span class="optional">recommended</span></label>
-        <input id="alt" type="text" maxlength="1000" placeholder="Describe the image for people using screen readers">
+      <ol class="agent-steps">
+        <li><strong>Create a key.</strong> It's built into the prompt below and shown only once.</li>
+        <li><strong>Copy the prompt</strong> and paste it into your agent.</li>
+        <li><strong>Ask it to post</strong>, e.g. <em>"Schedule ./launch.png to LinkedIn tomorrow at 9am with a short caption."</em></li>
+      </ol>
+
+      <div class="prompt-box">
+        <div class="prompt-bar">
+          <span class="prompt-title">Prompt for your agent</span>
+          <button class="btn btn-small" id="copy-prompt" type="button" disabled>Copy prompt</button>
+        </div>
+        <pre id="agent-prompt" class="prompt" tabindex="0"></pre>
       </div>
-
-      <fieldset class="field">
-        <legend>When</legend>
-        <div class="segmented" id="modes">
-          <label><input type="radio" name="mode" value="queue" checked><span>Add to queue</span></label>
-          <label><input type="radio" name="mode" value="schedule"><span>Schedule</span></label>
-          <label><input type="radio" name="mode" value="now"><span>Publish now</span></label>
-          <label><input type="radio" name="mode" value="draft"><span>Draft</span></label>
-        </div>
-        <div class="schedule-row" id="schedule-row" hidden>
-          <input type="datetime-local" id="due-at" aria-label="Publish time">
-          <span class="muted" id="tz-label"></span>
-        </div>
-        <p class="hint" id="mode-hint"></p>
-      </fieldset>
-
-      <p class="form-error" id="form-error" role="alert" hidden></p>
-      <button class="btn btn-primary btn-block" id="submit" type="submit">
-        <span class="spinner" aria-hidden="true"></span><span id="submit-label">Add to queue</span>
-      </button>
-      <p class="fine">
-        We keep this image only until Buffer sends your post, then delete it. Images that are never
-        posted are deleted after {{ unattached_ttl_hours }} hours. <a href="/privacy">How we handle your data</a>
+      <p class="fine" id="key-note">
+        Anyone with the key can post to your Buffer channels through media-bridge, so treat it like a
+        password. You can revoke it any time.
       </p>
-    </form>
-  </section>
+
+      <div class="keys" id="keys-section" hidden>
+        <h3 class="keys-title">Active keys</h3>
+        <ul class="key-list" id="key-list"></ul>
+      </div>
+    </section>
+  </div>
 
   <section class="card files" aria-labelledby="files-title">
     <div class="card-head">
@@ -89,6 +129,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 {% endblock %}
 {% block scripts %}
-<script>window.MB = { maxUploadMb: {{ max_upload_mb }}, mediaTtlDays: {{ media_ttl_days }} };</script>
+<script>window.MB = { maxUploadMb: {{ max_upload_mb }}, mediaTtlDays: {{ media_ttl_days }}, baseUrl: {{ base_url | tojson }} };</script>
 <script src="{{ url_for('static', path='app.js') }}" defer></script>
 {% endblock %}

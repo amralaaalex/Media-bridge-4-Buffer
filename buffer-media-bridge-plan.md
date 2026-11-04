@@ -293,7 +293,7 @@ Owner tags: **[YOU]** means Amr does it (accounts, setup, content, recording). *
 
 ### Day 6–7 (Nov 9–10): add-ons, only if core is done
 - [ ] [CC] Image prep per network (Pillow: resize, compress, convert format).
-- [ ] [CC] Agent access: a per-user API token plus a Claude Code skill or MCP tool `upload_and_post`. Buffer's own MCP can't upload, which makes a good story for the write-up.
+- [x] [CC] Agent access: per-user agent keys (`mb_…`, SHA-256 stored, shown once, revocable) as `Authorization: Bearer` on the JSON API, plus a **copy-paste prompt** on the home page that works with any agent that can run `curl`. Verified by following the copied prompt literally with curl: channels → upload → draft → status → delete. Buffer's own MCP can't upload, which makes a good story for the write-up.
 - [x] [CC] Stats page from `cleanup_events`: public `/stats` + `/api/stats` (anonymous aggregates, a single-series daily chart with tooltip and table view, colours validated with the dataviz validator) (files held and purged, bytes, average hold time).
 
 ### Day 8 (Nov 11): ship
@@ -347,6 +347,7 @@ Buffer slack: Nov 13 is the hard deadline; the plan leaves one day of margin.
 - 2026-11-03: Designed "Leash" scoped-token gateway; judged too complex / low roadmap demand (4 votes).
 - 2026-11-04: **Chose media hosting as the core feature.** Keep it simple. Leash parked as a late add-on.
 - 2026-11-04: Verified contest rules on the official page; confirmed submission needs app link + write-up + demo video, registration required, service must stay up through judging (to Dec 7).
+- 2026-11-04: Agent access uses a **prompt instead of an MCP server**. Agents upload local files with `curl -F`, which avoids base64 images in tool arguments and works in Claude Code, Cursor, Codex and others. Keys can't manage keys; that needs the browser session.
 - 2026-11-04: Hosting is **Render**, native Python runtime, on the default `media-bridge.onrender.com` URL with no custom domain, so R2 stays on r2.dev for now.
   - The start command was verified locally with `uv sync --frozen --no-dev`.
   - `--forwarded-allow-ips '*'` was moved to the `FORWARDED_ALLOW_IPS` env var because the shell glob-expanded the `*`.
