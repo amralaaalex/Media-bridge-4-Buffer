@@ -17,3 +17,7 @@ venv/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Saved third-party docs (not ours to republish)
+Buffer Commit - Developer Handbook.html
+Buffer Commit - Developer Handbook_files/

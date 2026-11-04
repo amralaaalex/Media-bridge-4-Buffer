@@ -22,7 +22,17 @@ A small service for the Buffer Commit contest (submission deadline **Nov 13, 202
 
 ## Hard constraints
 
-- **Rate limits:** App Clients get 100 requests per 15 minutes and 500 per 24 hours as a base. Cleanup polling must batch lookups, back off on 429 responses, and honor `Retry-After`.
+- **Rate limits are per client and shared by all users, including judges.** The contest handbook gives about 100 requests per 15 minutes and 250 per 24 hours.
+  - The cleanup job polls only files past their `due_at`.
+  - It batches up to 30 aliased `post(id)` lookups per request.
+  - It caches the org and channels, honors `Retry-After` on 429, and throttles using the `RateLimit` header.
+- **OAuth:** PKCE (S256) is mandatory even for confidential clients. Request `offline_access` or no refresh token is issued.
+  - **Refresh tokens are single-use.** Reusing one revokes the user's whole grant. Refresh under a DB lock, persist the new token immediately, and never retry a failed refresh with the same token.
+  - Keep `state` and `code_verifier` in a shared store or encrypted cookie, not in process memory.
+  - HTTPS is required even on localhost.
+- **Media hosting:** Buffer has no upload endpoint. It fetches the image URL at `createPost` time and again at publish time, so an object must not be deleted before the post's status is `sent`.
+- **No idempotency on `createPost`:** don't blindly retry after a timeout.
+- Section 6a of the plan has the exact GraphQL shapes, endpoints, scopes and status enums. Use them instead of guessing.
 - **Secrets:** encrypt OAuth tokens at rest (Fernet or libsodium) and never log them.
 - **Data minimization (contest terms):** store only the image and minimal metadata. Show a privacy note on the upload page, provide a "delete now" action for each file, and enforce the lifecycle deletion.
 - **Naming:** the product must not look like an official Buffer product. Don't put "Buffer" first in the product name. "Built on the Buffer API" is allowed.

@@ -76,7 +76,7 @@ Guiding principle agreed with Amr: **keep it simple**. One core feature done wel
 **Support**
 - Office hours every Tuesday and Thursday.
 - Discord (contest): https://discord.com/invite/kqZ7HNZu2u (channel: buffer-commit-support). Docs-site Discord: https://discord.gg/9skbzTz6vQ
-- Builder handbook (technical FAQ, could not be fetched automatically; read it manually): https://buffer.notion.site/Buffer-Commit-Developer-Handbook-3d7a7f5a00fd80918466e36eb2cba9f8
+- Builder handbook (technical FAQ; read on 2026-11-04, and the key points are in section 6a): https://buffer.notion.site/Buffer-Commit-Developer-Handbook-3d7a7f5a00fd80918466e36eb2cba9f8
 - Terms and conditions: https://buffer.com/api/commit/terms
 
 **Case studies Buffer highlighted as inspiration** (useful for the write-up's tone): PostIQ, Hiding Elephant, WriteStack, Pokémon Cards App — all at https://buffer.com/resources/case-studies/
@@ -128,14 +128,19 @@ FastAPI app  ── OAuth ──> Buffer GraphQL API (createPost, posts status)
    |
    +──> Object storage (Cloudflare R2) ── public URL ──> Buffer fetches image
 
-Scheduled cleanup job (every few minutes):
-  for each media_file in state HELD:
-    query post status via Buffer API
-    if sent        -> delete object, state = PURGED
-    if post deleted-> delete object, state = PURGED
-    if now > ttl   -> delete object, state = EXPIRED
-    else keep
+Scheduled cleanup job (every ~10 min, but only spends API calls on files that are due):
+  candidates = media_files in state HELD where due_at <= now (or due_at is null and last_checked_at is old)
+  group by user; per user, ONE request with up to 30 aliased post(id) lookups
+  for each result:
+    status sent              -> delete object, state = PURGED
+    post deleted (NOT_FOUND) -> delete object, state = PURGED
+    status error             -> keep (user may fix and reschedule in Buffer); re-check later
+    draft / needs_approval   -> keep; re-check daily
+    scheduled / sending      -> keep; re-check soon
+  any HELD file past ttl_expires_at -> delete object, state = EXPIRED (no API call needed)
 ```
+
+Budget: about 250 calls a day are shared by every user and by token refreshes. Do the arithmetic before demo day. For example, 50 due files is 2 calls per pass. Never poll files whose `due_at` is still in the future.
 
 ### Stack decisions
 - **API**: Python 3.12, FastAPI, httpx for Buffer calls.
@@ -147,23 +152,89 @@ Scheduled cleanup job (every few minutes):
 
 ### Data model (initial)
 ```
-users          id, buffer_org_id, created_at
-oauth_tokens   user_id, access_token_enc, refresh_token_enc, expires_at
+users          id, buffer_org_id, created_at, disconnected_at
+oauth_tokens   user_id, access_token_enc, refresh_token_enc, expires_at   (refresh under a row lock)
 media_files    id, user_id, object_key, public_url, content_type, size_bytes,
-               buffer_post_id (nullable), state (UPLOADED|HELD|PURGED|EXPIRED|FAILED),
+               buffer_post_id (nullable), channel_id, due_at (nullable),
+               last_post_status, state (UPLOADED|HELD|PURGED|EXPIRED|FAILED),
                ttl_expires_at, created_at, purged_at, last_checked_at
 cleanup_events id, media_file_id, decision, reason, checked_at   (audit trail, feeds stats page)
 ```
 
 ## 6. Things to verify before building (unknowns)
 
-- [ ] Exact GraphQL mutation shape for `createPost` with an image asset (field names, required channel/org IDs). Check Explorer: https://developers.buffer.com/explorer.html and the "Create Image Post" example.
-- [ ] Which post status values exist and which one means "sent/published". Check "Posts & Scheduling" guide.
-- [ ] Does Buffer fetch the image at post-creation time or at publish time? This decides whether we must hold the file until publish. The roadmap complaint suggests publish time; confirm empirically with a scheduled post.
-- [ ] Image constraints Buffer enforces (max size, formats) — "Hosting Media" guide.
-- [ ] OAuth scopes available to App Clients and the registration flow — "Building Apps" + "Authentication" guides.
-- [ ] Rate limits for App Clients: 100 req / 15 min and 500 / 24 h base, growing per authorized user. Cleanup polling must stay well inside this (batch posts per query, back off on 429, honor Retry-After).
-- [ ] Whether assets support alt text (only matters for add-on 3).
+Resolved on 2026-11-04 from the developer handbook and docs. Details are in section 6a.
+- [x] `createPost` shape for an image post. See 6a.
+- [x] Post status values. `sent` = published, `error` = failed. See 6a.
+- [x] Fetch timing. **Buffer validates the URL at create time and fetches the media again at publish time.** Hosting media guide: "The URL must stay reachable until the post publishes, not just when you create it." This confirms the hold-until-sent design.
+- [x] OAuth scopes and registration flow. See 6a.
+- [x] Rate limits. See 6a. Budget for the conservative handbook numbers.
+- [x] Alt text. Supported via `image.metadata.altText`, so add-on 3 is unblocked.
+
+Still open (test empirically):
+- [ ] Image format and size limits. The docs list none, and Buffer resolves dimensions itself. Try a large PNG, a large JPEG and a WebP against each target network.
+- [ ] What `post(input:{id})` returns after a post is deleted in Buffer. Probably a top-level `errors[]` entry with `NOT_FOUND` and null `data`. Test it, because one failing alias may null the whole aliased response.
+- [ ] Whether `saveToDraft: true` drafts still trigger a fetch of the URL at create time. They should, since dimensions are resolved.
+
+## 6a. Buffer API facts (from handbook + docs, 2026-11-04)
+
+**App client registration:** https://publish.buffer.com/settings/api → App Clients → New Client.
+- Choose **Private (confidential)** to get a client secret.
+- Fields: name, logo, privacy-policy link and permissions. Link the privacy note here as well.
+- Redirect URIs are matched character for character. Several are allowed: register both localhost and production.
+- **HTTPS is required, even on localhost**, so local dev needs a self-signed or mkcert certificate.
+- The Free plan allows 1 app client.
+- Sample app: https://github.com/bufferapp/buffer-sample-apps (`samples/app-client-starter-app`).
+
+**OAuth:** Authorization Code with **PKCE (S256), required even with a client secret**.
+- Authorize: `GET https://auth.buffer.com/auth` with `client_id, redirect_uri, response_type=code, scope, state, code_challenge, code_challenge_method=S256`.
+- Token: `POST https://auth.buffer.com/token`, form-encoded, with `grant_type=authorization_code` (or `refresh_token`), `client_id`, `client_secret`, `code`, `redirect_uri`, `code_verifier`.
+- Scopes needed: `posts:read posts:write account:read offline_access`. **Without `offline_access` there is no refresh token.**
+- Access tokens last 1 hour.
+- **Refresh tokens are single-use and rotating.** Reusing a spent one revokes the whole grant. Persist the new refresh token in the same transaction as the refresh, let exactly one code path or lock own refreshing, and never retry a failed refresh with the same token.
+- If `state` is lost between `/login` and `/callback` you get "Invalid state parameter". Keep `state` and `code_verifier` in a shared store or an encrypted cookie, not in-process memory.
+- A `401` means the user revoked access. Mark the user as disconnected and ask them to re-authorize.
+
+**GraphQL:**
+- One endpoint: `POST https://api.buffer.com` with `Authorization: Bearer <token>`.
+- It always returns HTTP 200 except for 429. System errors appear in `errors[].extensions.code`.
+- There are no webhooks, so polling is the only way to learn a post's status.
+- Get the org and channels in one request: `account { organizations { id name } }` and `channels(input:{organizationId}) { id name service isDisconnected }`. Cache them.
+
+**createPost:**
+```graphql
+createPost(input: {
+  channelId: "...", text: "...", schedulingType: automatic,
+  mode: customScheduled, dueAt: "2026-11-10T15:00:00.000Z",   # or mode: addToQueue / shareNow
+  saveToDraft: false,
+  assets: [{ image: { url: "https://...", metadata: { altText: "..." } } }]
+}) {
+  ... on PostActionSuccess { post { id status dueAt } }
+  ... on MutationError { message }
+}
+```
+- There is no `organizationId` in the input; the channel implies it.
+- `needsApproval` is marked non-null in the schema but none of the examples send it. Test whether it's required.
+- `ShareMode` values: `addToQueue | customScheduled | shareNext | shareNow`.
+- A URL Buffer can't fetch fails at create time with "Failed to fetch image dimensions".
+- **No idempotency key:** after a timeout, check `posts` (by channel and a narrow `createdAt` window) before retrying.
+- `saveToDraft: true` creates a draft that never publishes. Use it for testing.
+
+**Post status:**
+- `PostStatus` values: `draft | needs_approval | scheduled | sending | sent | error`.
+- Useful fields: `status`, `dueAt`, `sentAt`, `externalLink`, `error { message }`.
+
+**Bulk status checks:**
+- `posts(first:100, input:{organizationId, filter:{status:[...], channelIds:[...], dueAt:{start,end}, createdAt:{...}}})`. This query **cannot filter by ID**.
+- For specific IDs, alias `post(input:{id})` lookups into one query, up to **30 aliases**.
+- Query limits: complexity 175k, depth 25, 15k tokens.
+
+**Rate limits (the binding constraint for cleanup):**
+- The contest handbook gives the Free tier as **100 / 15 min, 250 / 24 h, 3,000 / 30 days, per client, shared by all users including judges**.
+- The docs give a base of 100 / 500 / 15,000, plus +10 / +25 / +100 per authorized user.
+- Design for the handbook numbers. A 429 includes a `Retry-After` header and the code `RATE_LIMIT_EXCEEDED`, and doesn't count against quota. Every other failed request does count.
+- Every response carries `RateLimit` and `RateLimit-Policy` headers with `r` (remaining) and `t` (seconds to reset). Match the window by `w`.
+- Throttle at about 10% remaining.
 
 ## 7. Task plan
 
@@ -173,9 +244,11 @@ Status key: `[ ]` todo, `[~]` in progress, `[x]` done, `[-]` dropped. Update as 
 - [ ] Register for the contest with the Buffer account: https://buffer.com/api/commit/register
 - [ ] Read the builder handbook and the terms; note anything that changes this plan in the "Decisions log".
 - [ ] Join the contest Discord and post a one-line "what I'm building" intro (first build-in-public post).
-- [ ] Register Buffer App Client, get client id/secret, set redirect URL.
+- [x] Read the handbook (saved locally, gitignored) and the API guides. Findings are in section 6a.
+- [ ] Register a Buffer App Client (Private), get the client id and secret, and add both redirect URIs: `https://localhost:8000/callback` plus the production URL.
+- [ ] Local HTTPS for dev (mkcert or a self-signed cert with `uvicorn --ssl-keyfile/--ssl-certfile`).
 - [ ] Repo skeleton: FastAPI app, config via env vars, Dockerfile, README stub.
-- [ ] OAuth flow: login → callback → store encrypted tokens → token refresh helper.
+- [ ] OAuth flow with PKCE (S256) and `offline_access`: login → callback (verify `state`) → store encrypted tokens → single-owner rotating refresh helper.
 - [ ] Buffer client module: `get_channels()`, `create_post(channel_id, text, image_url, scheduled_at | draft)`, `get_post(post_id)`.
 - [ ] R2 bucket + upload helper returning public URL.
 - [ ] Smoke test: upload a file manually, create a draft post with it, see it in Buffer.
@@ -231,8 +304,9 @@ Buffer slack: Nov 13 is the hard deadline; the plan leaves one day of margin.
 
 | Risk | Mitigation |
 |---|---|
-| Buffer copies media at creation time, making the hold logic unnecessary | Still valuable: users get hosting they didn't have. Reframe the hold as "safe by default"; shorten default TTL. |
-| App Client rate limits too low for polling | Batch post lookups; poll HELD files on a backoff schedule (e.g. only near scheduled time). |
+| ~~Buffer copies media at creation time~~ | Resolved. The docs confirm Buffer fetches at publish time, so the hold logic is needed. |
+| App client rate limits (about 250/day, shared by all users and judges) | Poll only files that are past `due_at`. Use 30 aliased lookups per call, cache org and channels, and throttle at 10% remaining. |
+| Refresh-token replay revokes a user's grant | Rotate tokens under a DB row lock, persist the new token before using it, and never retry a refresh with the same token. |
 | Hosting goes down during judging (Nov 16 – Dec 7) | Health checks, pick a provider with an always-on tier (free tiers that sleep may fail), test a day early. |
 | Scope creep | Add-ons only after section 4 "Core" is fully checked off. |
 | Judged as a "technical demo" rather than useful | The terms say usefulness means a real user's problem, not technical skill. Lead the video and summary with the user's pain, show the tech second. |
@@ -244,6 +318,12 @@ Buffer slack: Nov 13 is the hard deadline; the plan leaves one day of margin.
 - 2026-11-03: Designed "Leash" scoped-token gateway; judged too complex / low roadmap demand (4 votes).
 - 2026-11-04: **Chose media hosting as the core feature.** Keep it simple. Leash parked as a late add-on.
 - 2026-11-04: Verified contest rules on the official page; confirmed submission needs app link + write-up + demo video, registration required, service must stay up through judging (to Dec 7).
+- 2026-11-04: Read the developer handbook and the API docs.
+  - Buffer fetches media at publish time, which confirms the core value.
+  - Rate limits are per client and shared, about 250 a day per the handbook, so cleanup polls only due files with batched aliased lookups.
+  - PKCE is mandatory and refresh tokens rotate. Local dev needs HTTPS.
+  - Alt text is supported.
+  - `media_files` gains `channel_id`, `due_at` and `last_post_status`.
 - 2026-11-04: Read the terms. Changes: demo video ≤ 2 min; summary ~300 words with four required parts; app client ID required; name must not imply an official Buffer product; data-minimization clause → add privacy note and delete action; judging ~Nov 16–20 with a 9/15 minimum score.
 
 ## 11. Useful links
