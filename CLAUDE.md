@@ -48,9 +48,7 @@ Tests set their env vars in `tests/conftest.py` before importing `app.*`, becaus
 - **UI:** `app/templates/*.html` (Jinja, extending `base.html`) and `app/static/{style.css,app.js}`.
   - The JS calls only the JSON API (`/api/files`, `/api/files/{id}/post`, `/api/files/{id}/delete`, `/api/channels`, `/api/account/delete`) and turns states into plain-language copy in `describe()`.
   - CSS colours are tokens on `:root`, with a dark-mode override. `[hidden]` is forced to `display: none` because component `display` rules would otherwise beat it.
-- **Screenshots and UI checks:** run `uv run --with playwright python <script>` with `chromium.launch(channel="msedge")`, which uses the installed Edge, so there's no browser download.
-  - For a logged-in page, sign Starlette's `session` cookie yourself: `TimestampSigner(SESSION_SECRET).sign(b64(json({"uid": 1})))`.
-  - `uvicorn --reload` sometimes stops reloading after an edit. If a new route returns 404, restart the server.
+- **Running, screenshotting and driving the UI** is covered by the project skill `/run-media-bridge` (`.claude/skills/run-media-bridge/`). Its `driver.py` drives the installed Edge via Playwright, and its gotchas section covers stale `--reload`, the forged session cookie and Buffer quota costs.
 - `scripts/cli.py` handles `post` / `files` / `check [--force]` / `delete` as the first DB user. Use it for live tests.
 - `app/main.py` holds the routes. The OAuth `state` and PKCE verifier travel in the Fernet-encrypted `oauth_tx` cookie, and the logged-in user id is kept in Starlette's signed session cookie.
 

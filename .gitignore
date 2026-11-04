@@ -29,3 +29,6 @@ certs/
 # Personal test images
 test_data/images/
 .neon
+
+# Driver output (screenshots)
+.run/
