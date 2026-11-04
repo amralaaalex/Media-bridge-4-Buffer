@@ -63,7 +63,7 @@ def main() -> None:
                 text="media-bridge smoke test (draft, will not publish)",
                 image_url=url,
                 alt_text="A plain blue test image",
-                draft=True,
+                mode="draft",
             )
         except buffer_client.BufferError as exc:
             storage.delete(key)

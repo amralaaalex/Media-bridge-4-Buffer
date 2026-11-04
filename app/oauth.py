@@ -8,7 +8,7 @@ the new tokens are committed before they are used, and a failed refresh is never
 import base64
 import hashlib
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from urllib.parse import urlencode
 
 import httpx
@@ -91,17 +91,12 @@ def store_tokens(db: Session, user: User, token_response: dict) -> OAuthToken:
     return tok
 
 
-def _as_aware(dt: datetime) -> datetime:
-    # SQLite drops tzinfo; values are always written as UTC.
-    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
-
-
 def get_access_token(db: Session, user: User, http: httpx.Client) -> str:
     """Return a valid access token, refreshing (and rotating) it if needed. Commits."""
     tok = db.get(OAuthToken, user.id)
     if tok is None or user.disconnected_at is not None:
         raise ReauthRequired("no stored grant")
-    if _as_aware(tok.expires_at) - EXPIRY_MARGIN > utcnow():
+    if tok.expires_at - EXPIRY_MARGIN > utcnow():
         return decrypt(tok.access_token_enc)
 
     # Lock the row, then re-check: another worker may have refreshed while we waited.
@@ -109,7 +104,7 @@ def get_access_token(db: Session, user: User, http: httpx.Client) -> str:
         select(OAuthToken).where(OAuthToken.user_id == user.id).with_for_update()
     ).scalar_one()
     db.refresh(tok)
-    if _as_aware(tok.expires_at) - EXPIRY_MARGIN > utcnow():
+    if tok.expires_at - EXPIRY_MARGIN > utcnow():
         db.commit()
         return decrypt(tok.access_token_enc)
 

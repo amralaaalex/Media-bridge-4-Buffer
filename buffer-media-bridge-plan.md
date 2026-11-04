@@ -140,6 +140,13 @@ Scheduled cleanup job (every ~10 min, but only spends API calls on files that ar
   any HELD file past ttl_expires_at -> delete object, state = EXPIRED (no API call needed)
 ```
 
+**Wake-up scheduling (protects both Buffer quota and Neon compute hours):** no fixed polling interval.
+- After each pass, compute the next wake time from the DB: `min(due_at of HELD files, next re-check time for scheduled/error/draft files, next ttl_expires_at)`.
+- Schedule a single APScheduler `date` job for that time.
+- Creating or deleting a file reschedules the job if the new time is earlier.
+- With nothing due, the DB isn't touched, so Neon can scale to zero.
+- Also make sure idle pooled connections don't keep the compute awake (short `pool_recycle`, or NullPool). Verify the free plan's monthly compute hours and suspend behaviour in the Neon console before deploying.
+
 Budget: about 250 calls a day are shared by every user and by token refreshes. Do the arithmetic before demo day. For example, 50 due files is 2 calls per pass. Never poll files whose `due_at` is still in the future.
 
 ### Stack decisions
@@ -156,7 +163,7 @@ users          id, buffer_account_id, buffer_org_id, created_at, disconnected_at
 oauth_tokens   user_id, access_token_enc, refresh_token_enc, expires_at   (refresh under a row lock)
 media_files    id, user_id, object_key, public_url, content_type, size_bytes,
                buffer_post_id (nullable), channel_id, due_at (nullable),
-               last_post_status, state (UPLOADED|HELD|PURGED|EXPIRED|FAILED),
+               last_post_status, state (UPLOADED|HELD|PURGED|EXPIRED), next_check_at,
                ttl_expires_at, created_at, purged_at, last_checked_at
 cleanup_events id, media_file_id, decision, reason, checked_at   (audit trail, feeds stats page)
 ```
@@ -175,7 +182,8 @@ Still open (test empirically):
 - [ ] Image format and size limits. The docs list none, and Buffer resolves dimensions itself. Try a large PNG, a large JPEG and a WebP against each target network.
 - [x] `needsApproval` is not required: createPost succeeded without it (2026-11-04).
 - [x] Drafts do fetch the URL at create time: Buffer resolved 1200x627 for a `saveToDraft` post.
-- [ ] What `post(input:{id})` returns after a post is deleted in Buffer. Probably a top-level `errors[]` entry with `NOT_FOUND` and null `data`. Test it, because one failing alias may null the whole aliased response.
+- [x] (2026-11-04, live) What `post(input:{id})` returns after a post is deleted in Buffer: an `errors[]` entry with `extensions.code = NOT_FOUND` and `path = [alias]`, and **`data: null` for the whole response**. `get_posts` handles this.
+- [-] Original note: what `post(input:{id})` returns after a post is deleted in Buffer. Probably a top-level `errors[]` entry with `NOT_FOUND` and null `data`. Test it, because one failing alias may null the whole aliased response.
 
 ## 6a. Buffer API facts (from handbook + docs, 2026-11-04)
 
@@ -268,12 +276,12 @@ Owner tags: **[YOU]** means Amr does it (accounts, setup, content, recording). *
 - [ ] [YOU] Delete the smoke-test draft in Buffer (post `6aeb02cd1d881477a61aa3cc`). After that, its R2 object can be removed.
 
 ### Day 3–4 (Nov 5–7): lifecycle [CC]
-- [ ] [CC] `media_files` and `cleanup_events` tables. Keep `create_all` (no Alembic) unless the schema needs to change after deploy.
-- [ ] [CC] `POST /upload`: validate type and size, store in R2, insert a row (UPLOADED).
-- [ ] [CC] `POST /posts`: create the Buffer post (queue, scheduled or draft) with the file URL, then set `buffer_post_id` and `due_at`, state HELD. Show a clear error on `LimitReachedError` (the Free plan allows 10 scheduled posts).
-- [ ] [CC] Cleanup job (APScheduler, in-process). It checks only files past `due_at`, with up to 30 aliased lookups per call, follows the section 5 decision table, writes `cleanup_events`, and backs off on rate limits.
-- [ ] [CC] TTL expiry (`MEDIA_TTL_DAYS`) and handling for a post deleted in Buffer (resolves the open question in section 6).
-- [ ] [CC] "Delete now" per file. If the post is still pending, warn that it will lose its image.
+- [x] [CC] `media_files` and `cleanup_events` tables. Keep `create_all` (no Alembic) unless the schema needs to change after deploy.
+- [x] [CC] `POST /api/files` (upload): validate type and size, store in R2, insert a row (UPLOADED).
+- [x] [CC] `POST /api/files/{id}/post`: create the Buffer post (queue, scheduled or draft) with the file URL, then set `buffer_post_id` and `due_at`, state HELD. Show a clear error on `LimitReachedError` (the Free plan allows 10 scheduled posts).
+- [x] [CC] Cleanup job (in-process thread that sleeps until the next `next_check_at`; APScheduler wasn't needed). It checks only files past `due_at`, with up to 30 aliased lookups per call, follows the section 5 decision table, writes `cleanup_events`, and backs off on rate limits.
+- [x] [CC] TTL expiry (`MEDIA_TTL_DAYS`) and handling for a post deleted in Buffer (resolves the open question in section 6).
+- [x] [CC] "Delete now" per file (`POST /api/files/{id}/delete`). If the post is still pending, warn that it will lose its image.
 - [ ] [CC + YOU] Live test: schedule a post 5–10 min out on the throwaway channel, then confirm the file survives until `sent` and is purged after. Needs the second channel.
 
 ### Day 5 (Nov 8): UI [CC]
@@ -334,6 +342,12 @@ Buffer slack: Nov 13 is the hard deadline; the plan leaves one day of margin.
 - 2026-11-03: Designed "Leash" scoped-token gateway; judged too complex / low roadmap demand (4 votes).
 - 2026-11-04: **Chose media hosting as the core feature.** Keep it simple. Leash parked as a late add-on.
 - 2026-11-04: Verified contest rules on the official page; confirmed submission needs app link + write-up + demo video, registration required, service must stay up through judging (to Dec 7).
+- 2026-11-04: Lifecycle built and tested live (scenarios 1, 3, 4 and 6 pass).
+  - The cleanup job is a thread that sleeps until `min(next_check_at)`, woken early by uploads and posts. This replaced APScheduler.
+  - Postgres connections use NullPool, so idle pooled connections can't keep Neon awake.
+  - Uploads never attached to a post expire after 24 h.
+  - A Buffer rejection leaves the file UPLOADED so the user can retry. The `FAILED` state was dropped as unused.
+  - `scripts/cli.py` drives the lifecycle from the terminal.
 - 2026-11-04: Moved to Neon Postgres in Frankfurt, matching the R2 bucket's WEUR location.
   - The app uses the **direct** endpoint, not `-pooler`: a long-running server with its own SQLAlchemy pool doesn't need PgBouncer, and this avoids prepared-statement issues in transaction pooling mode.
   - Installed the Neon CLI, the Neon MCP server (user level) and the `neon` and `neon-postgres` skills (project level).

@@ -13,7 +13,13 @@ class Settings(BaseSettings):
     app_base_url: str = "https://localhost:8000"
     session_secret: str
     token_encryption_key: str
+    # Max days to keep a file attached to a post that never reaches "sent".
     media_ttl_days: int = 60
+    # Uploads never attached to a post are deleted after this many hours.
+    unattached_ttl_hours: int = 24
+    max_upload_mb: int = 20
+    # Off in tests; on for the server process.
+    cleanup_worker_enabled: bool = True
 
     buffer_client_id: str
     buffer_client_secret: str

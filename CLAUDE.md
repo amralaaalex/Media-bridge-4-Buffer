@@ -39,6 +39,13 @@ Tests set their env vars in `tests/conftest.py` before importing `app.*`, becaus
 - `app/buffer_client.py` holds the `graphql()` helper, typed errors (`BufferUnauthorized`, `BufferRateLimited`) and the module-level `rate_limits` state parsed from the `RateLimit` header.
 - `app/storage.py` uploads to and deletes from R2 with boto3 (S3 API). Keys are `uuid4.ext`, and public URLs come from `R2_PUBLIC_BASE_URL`.
 - `scripts/smoke_test.py` (`uv run python -m scripts.smoke_test`) runs the live end-to-end check: dummy PNG → R2 → Buffer **draft** on the first channel, using the first logged-in user in the local DB.
+- `app/media.py` is the lifecycle service layer: `upload_file` sniffs magic bytes and enforces the size limit, `post_file` creates the post and moves the file UPLOADED → HELD, `remove_file` deletes from R2 and writes a `CleanupEvent`, and `next_check_for` decides when to look again. Routes, the CLI and the cleanup job all go through it.
+- `app/cleanup.py` holds `run_pass()`, which runs TTL expiry and then batched status checks of due HELD files, and `CleanupWorker`.
+  - The worker is a daemon thread that sleeps until the earliest `next_check_at` (capped at 6 h). `poke()` wakes it early.
+  - It assumes **one app process**. Running several workers would double-check files.
+  - Any code path that leaves a file due must advance `next_check_at` or return a back-off time. Otherwise the worker spins.
+- `app/buffer_client.get_posts()` checks up to 30 posts per request using aliases. A deleted post comes back as `NOT_FOUND` with `data: null` for the *whole* response, so its siblings come back unknown and get re-checked 15 min later.
+- `scripts/cli.py` handles `post` / `files` / `check [--force]` / `delete` as the first DB user. Use it for live tests.
 - `app/main.py` holds the routes. The OAuth `state` and PKCE verifier travel in the Fernet-encrypted `oauth_tx` cookie, and the logged-in user id is kept in Starlette's signed session cookie.
 
 ## What is being built
@@ -49,7 +56,7 @@ A small service for the Buffer Commit contest (submission deadline **Nov 13, 202
 
 - **FastAPI** (Python 3.12) app, with **httpx** for calls to Buffer's **GraphQL** API.
 - **Buffer OAuth via an App Client.** Do not use a personal API key: the contest requires OAuth, and it must work for any Buffer account because judges use their own test accounts.
-- **Postgres** with the tables `users`, `oauth_tokens`, `media_files` and `cleanup_events`. `media_files.state` moves through `UPLOADED → HELD → PURGED | EXPIRED | FAILED`.
+- **Postgres** with the tables `users`, `oauth_tokens`, `media_files` and `cleanup_events`. `media_files.state` moves through `UPLOADED → HELD → PURGED | EXPIRED`.
 - **Cloudflare R2** public bucket with unguessable `uuid4.ext` keys. Do not use expiring signed URLs, because a scheduled post may publish weeks later.
 - **Cleanup job** (APScheduler or a separate worker, not Celery/Redis). It polls `HELD` files and deletes the object when the post is sent, when the post has been deleted, or when the TTL expires. Every decision is written to `cleanup_events`.
 

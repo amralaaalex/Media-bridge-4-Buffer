@@ -9,4 +9,5 @@ os.environ.update(
     BUFFER_CLIENT_ID="test-client",
     BUFFER_CLIENT_SECRET="test-secret",
     DATABASE_URL=f"sqlite:///{tempfile.mkdtemp()}/test.db",
+    CLEANUP_WORKER_ENABLED="false",
 )
