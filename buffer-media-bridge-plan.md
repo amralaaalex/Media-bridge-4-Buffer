@@ -258,12 +258,12 @@ Owner tags: **[YOU]** means Amr does it (accounts, setup, content, recording). *
 - [x] [CC] R2 upload/delete helper. Smoke test: R2 image → LinkedIn draft with alt text, verified live.
 
 ### Setup on Amr's side, start now (these block later steps)
-- [ ] [YOU] **Second Buffer channel for publish tests.** Connect a throwaway Bluesky or Mastodon account to the same Buffer org (the Free plan allows 3). Needed by the Day 3–4 "post publishes → file purged" test, so it doesn't post to the real LinkedIn.
+- [-] [YOU] **Second Buffer channel for publish tests.** Dropped: Amr is OK with publishing on LinkedIn. Test posts are listed in `test_data/posts.csv`. Connect a throwaway Bluesky or Mastodon account to the same Buffer org (the Free plan allows 3). Needed by the Day 3–4 "post publishes → file purged" test, so it doesn't post to the real LinkedIn.
 - [ ] [YOU] **Second Buffer account** (different email, Free plan, one channel). Use it to test the OAuth flow the way judges will, as an account that isn't the app owner.
-- [ ] [YOU] **Postgres:** create a Neon (or Supabase) project and put its URL in `.env` as `DATABASE_URL=postgresql+psycopg://...?sslmode=require`. A free tier is fine.
+- [x] [YOU] **Postgres:** Neon project `media-bridge` (`wild-king-33369087`) in org Amr, region aws-eu-central-1 (Frankfurt), close to the R2 bucket (WEUR). `.env` uses the direct (unpooled) endpoint as `postgresql+psycopg://`.
 - [ ] [YOU] **Hosting account:** Render or Fly.io, on a paid **always-on** instance (a few USD a month). Free tiers sleep, which stops the cleanup job and can fail the judges' first request. Connect it to the GitHub repo.
 - [ ] [YOU] **Domain (recommended):** a domain on Cloudflare for `media.<domain>` (the R2 custom domain, replacing r2.dev, which Cloudflare rate-limits and labels as dev-only) and `app.<domain>` (the app). Skip it if needed; r2.dev plus the host's default URL also work.
-- [ ] [YOU] **Product name.** It must not start with "Buffer" (section 2, Naming). Needed by Day 5 for the UI.
+- [x] [YOU] **Product name:** `media-bridge`.
 - [ ] [YOU] Join the contest Discord and post a one-line intro. That is build-in-public post #1, and it must disclose it's about Buffer Commit.
 - [ ] [YOU] Delete the smoke-test draft in Buffer (post `6aeb02cd1d881477a61aa3cc`). After that, its R2 object can be removed.
 
@@ -334,6 +334,12 @@ Buffer slack: Nov 13 is the hard deadline; the plan leaves one day of margin.
 - 2026-11-03: Designed "Leash" scoped-token gateway; judged too complex / low roadmap demand (4 votes).
 - 2026-11-04: **Chose media hosting as the core feature.** Keep it simple. Leash parked as a late add-on.
 - 2026-11-04: Verified contest rules on the official page; confirmed submission needs app link + write-up + demo video, registration required, service must stay up through judging (to Dec 7).
+- 2026-11-04: Moved to Neon Postgres in Frankfurt, matching the R2 bucket's WEUR location.
+  - The app uses the **direct** endpoint, not `-pooler`: a long-running server with its own SQLAlchemy pool doesn't need PgBouncer, and this avoids prepared-statement issues in transaction pooling mode.
+  - Installed the Neon CLI, the Neon MCP server (user level) and the `neon` and `neon-postgres` skills (project level).
+- 2026-11-04: The name is **media-bridge**. Live tests publish to Amr's LinkedIn.
+  - `test_data/posts.csv` holds the 9 test scenarios. Only 3 publish on LinkedIn, and those double as build-in-public posts.
+  - The images go in `test_data/images/`, which is gitignored.
 - 2026-11-04: Smoke test passed. A dummy PNG went to R2, and a LinkedIn draft was created with the image and alt text attached.
   - Buffer stores **our URL** as the asset source (`assets[0].source` = the r2.dev URL), not a copy. This confirms the file must outlive the post.
   - The live app-client quota with 1 user is 110 / 15 min, 525 / 24 h and 15,100 / 30 days. That matches the docs' formula (base + per-user), not the handbook's 250 a day. Keep the cleanup design conservative anyway.

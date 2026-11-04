@@ -25,3 +25,7 @@ Buffer Commit - Developer Handbook_files/
 # Local dev
 certs/
 *.db
+
+# Personal test images
+test_data/images/
+.neon
