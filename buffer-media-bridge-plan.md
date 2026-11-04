@@ -246,56 +246,64 @@ createPost(input: {
 
 ## 7. Task plan
 
-Status key: `[ ]` todo, `[~]` in progress, `[x]` done, `[-]` dropped. Update as you go.
+Status key: `[ ]` todo, `[~]` in progress, `[x]` done, `[-]` dropped.
+Owner tags: **[YOU]** means Amr does it (accounts, setup, content, recording). **[CC]** means Claude Code does it. Update the boxes as you go.
 
-### Day 1–2 (Nov 4–5): foundation
-- [ ] Register for the contest with the Buffer account: https://buffer.com/api/commit/register
-- [ ] Read the builder handbook and the terms; note anything that changes this plan in the "Decisions log".
-- [ ] Join the contest Discord and post a one-line "what I'm building" intro (first build-in-public post).
-- [x] Read the handbook (saved locally, gitignored) and the API guides. Findings are in section 6a.
-- [x] Register a Buffer App Client (Private), get the client id and secret, and add both redirect URIs: `https://localhost:8000/callback` plus the production URL.
-- [x] Local HTTPS for dev (mkcert or a self-signed cert with `uvicorn --ssl-keyfile/--ssl-certfile`).
-- [~] Repo skeleton: FastAPI app, config via env vars (done); Dockerfile and README stub still to do.
-- [x] OAuth flow with PKCE (S256) and `offline_access`: login → callback (verify `state`) → store encrypted tokens → single-owner rotating refresh helper.
-- [x] Buffer client module: `get_channels()`, `create_post(channel_id, text, image_url, scheduled_at | draft)`, `get_post(post_id)`.
-- [x] R2 bucket + upload helper returning public URL (`app/storage.py`, public `r2.dev` URL for now; switch to a custom domain before judging).
-- [x] Smoke test: upload a file manually, create a draft post with it, see it in Buffer (`scripts/smoke_test.py`).
+### Done (Nov 4)
+- [x] [YOU] Register for the contest (confirmation email received).
+- [x] [CC] Read the handbook and API guides. Findings are in section 6a.
+- [x] [YOU] App client `media-bridge` (Private) with scopes `posts:read posts:write account:read offline_access` and redirect `https://localhost:8000/callback`.
+- [x] [CC] uv + FastAPI skeleton, local HTTPS, OAuth with PKCE and rotating refresh, Buffer GraphQL client.
+- [x] [YOU] R2 bucket `media-bridge` with a public r2.dev URL and an API token.
+- [x] [CC] R2 upload/delete helper. Smoke test: R2 image → LinkedIn draft with alt text, verified live.
 
-### Day 3–4 (Nov 6–7): lifecycle
-- [ ] Postgres schema (section 5) + migrations.
-- [ ] `POST /upload` → stores object, inserts `media_files` row (UPLOADED).
-- [ ] `POST /posts` → creates Buffer post with the file's URL, sets `buffer_post_id`, state HELD.
-- [ ] Cleanup job: poll HELD files, apply decision table, write `cleanup_events`.
-- [ ] TTL default (e.g. 60 days) and a "post deleted on Buffer" check.
-- [ ] Test: create a post scheduled 5–10 minutes out, confirm file survives until sent and is purged after.
+### Setup on Amr's side, start now (these block later steps)
+- [ ] [YOU] **Second Buffer channel for publish tests.** Connect a throwaway Bluesky or Mastodon account to the same Buffer org (the Free plan allows 3). Needed by the Day 3–4 "post publishes → file purged" test, so it doesn't post to the real LinkedIn.
+- [ ] [YOU] **Second Buffer account** (different email, Free plan, one channel). Use it to test the OAuth flow the way judges will, as an account that isn't the app owner.
+- [ ] [YOU] **Postgres:** create a Neon (or Supabase) project and put its URL in `.env` as `DATABASE_URL=postgresql+psycopg://...?sslmode=require`. A free tier is fine.
+- [ ] [YOU] **Hosting account:** Render or Fly.io, on a paid **always-on** instance (a few USD a month). Free tiers sleep, which stops the cleanup job and can fail the judges' first request. Connect it to the GitHub repo.
+- [ ] [YOU] **Domain (recommended):** a domain on Cloudflare for `media.<domain>` (the R2 custom domain, replacing r2.dev, which Cloudflare rate-limits and labels as dev-only) and `app.<domain>` (the app). Skip it if needed; r2.dev plus the host's default URL also work.
+- [ ] [YOU] **Product name.** It must not start with "Buffer" (section 2, Naming). Needed by Day 5 for the UI.
+- [ ] [YOU] Join the contest Discord and post a one-line intro. That is build-in-public post #1, and it must disclose it's about Buffer Commit.
+- [ ] [YOU] Delete the smoke-test draft in Buffer (post `6aeb02cd1d881477a61aa3cc`). After that, its R2 object can be removed.
 
-### Day 5 (Nov 8): UI
-- [ ] Upload page (file picker, channel dropdown, text, schedule or draft).
-- [ ] Privacy note on the upload page (what is stored, for how long, how to delete) and a "delete now" action per file — required by the terms' data-minimization clause.
-- [ ] Decide the product name (not Buffer-first; see Naming in section 2).
-- [ ] Status page listing files with state, linked post, and timestamps.
-- [ ] Basic error display (Buffer errors, rate limit messages).
+### Day 3–4 (Nov 5–7): lifecycle [CC]
+- [ ] [CC] `media_files` and `cleanup_events` tables. Keep `create_all` (no Alembic) unless the schema needs to change after deploy.
+- [ ] [CC] `POST /upload`: validate type and size, store in R2, insert a row (UPLOADED).
+- [ ] [CC] `POST /posts`: create the Buffer post (queue, scheduled or draft) with the file URL, then set `buffer_post_id` and `due_at`, state HELD. Show a clear error on `LimitReachedError` (the Free plan allows 10 scheduled posts).
+- [ ] [CC] Cleanup job (APScheduler, in-process). It checks only files past `due_at`, with up to 30 aliased lookups per call, follows the section 5 decision table, writes `cleanup_events`, and backs off on rate limits.
+- [ ] [CC] TTL expiry (`MEDIA_TTL_DAYS`) and handling for a post deleted in Buffer (resolves the open question in section 6).
+- [ ] [CC] "Delete now" per file. If the post is still pending, warn that it will lose its image.
+- [ ] [CC + YOU] Live test: schedule a post 5–10 min out on the throwaway channel, then confirm the file survives until `sent` and is purged after. Needs the second channel.
 
-### Day 6–7 (Nov 9–10): add-ons (pick what fits)
-- [ ] Image prep per network (Pillow: resize, compress, format convert).
-- [ ] Claude Code skill / MCP tool: single `upload_and_post` action calling the JSON API.
-- [ ] Stats page from `cleanup_events` (optional).
+### Day 5 (Nov 8): UI [CC]
+- [ ] [CC] Upload page: drag-and-drop, channel picker, caption, alt text, and a queue / schedule / draft choice.
+- [ ] [CC] Status page: files with state, linked post, due and purge times, and the delete-now button.
+- [ ] [CC] Privacy note: what is stored, for how long, and how to delete it. Also serve it at `/privacy` so its URL can go on the app client.
+- [ ] [CC] Friendly errors: Buffer rejections, rate limits, reconnect prompts.
+- [ ] [YOU] Review the UI. The Delight Award is judged on user experience.
+
+### Day 6–7 (Nov 9–10): add-ons, only if core is done
+- [ ] [CC] Image prep per network (Pillow: resize, compress, convert format).
+- [ ] [CC] Agent access: a per-user API token plus a Claude Code skill or MCP tool `upload_and_post`. Buffer's own MCP can't upload, which makes a good story for the write-up.
+- [ ] [CC] Stats page from `cleanup_events` (files held and purged, bytes, average hold time).
 
 ### Day 8 (Nov 11): ship
-- [ ] Deploy to Fly.io/Render with Postgres + R2 credentials.
-- [ ] Full end-to-end test from a fresh Buffer account via OAuth.
-- [ ] Rate-limit safety check on the cleanup job.
-- [ ] Logging and a simple health endpoint.
+- [ ] [CC] Dockerfile, deploy config, README, structured logging. `/health` already exists.
+- [ ] [YOU] Deploy. Set the env vars on the host (the `.env` values with the Postgres URL, and `BUFFER_REDIRECT_URI` / `APP_BASE_URL` set to the production URL).
+- [ ] [YOU] App client: add the production redirect URI `https://<app-domain>/callback`, the logo and the privacy policy URL (`/privacy`).
+- [ ] [YOU] R2: attach the custom domain and update `R2_PUBLIC_BASE_URL` (if a domain is used).
+- [ ] [CC + YOU] End-to-end test on production using the **second Buffer account**.
+- [ ] [CC] Rate-limit review of the cleanup job against real usage.
 
 ### Day 9 (Nov 12): submit
-- [ ] Written summary (required), ~300 words, in this order: problem solved (cite the two roadmap requests and vote counts), intended audience (people who post daily and automate with the API or agents), Buffer API surface used (OAuth, createPost with image asset, post status queries), planned next steps. Keep a longer README separately.
-- [ ] Have the app client ID, full legal name, registration email, and social handles ready for the form.
-- [ ] Demo video link (required), **under 2 minutes**, recorded against the live API: upload → schedule → post publishes → file auto-purged. No slides.
-- [ ] Public app link (required): confirm it works logged-out from a fresh browser.
-- [ ] Submit at https://buffer.com/api/commit/submit before Nov 13, 11:59 PM PT (that is Nov 14, 09:59 AM Cairo time).
-- [ ] Keep the service running until at least Dec 7 (winners announced).
-- [ ] Build-in-public: 3–5 public posts during the week, each disclosing it is about participating in Buffer Commit. Save the links; the form takes up to five.
-- [ ] Spend 1–2 hours on UI polish before submitting (Delight Award is judged on user experience).
+- [ ] [CC] Draft the ~300-word summary (problem with the roadmap votes, audience, API surface, next steps) and a longer README. [YOU] Edit it into your voice.
+- [ ] [YOU] Record the demo video (**≤ 2 min**, live API, no slides): upload → schedule → shows in Buffer → publishes → file purged. Use section 8 as the script; schedule the post ~5 min out before recording.
+- [ ] [YOU] Get ready for the form: app client ID, full legal name, registration email (the verified Buffer email), social handles.
+- [ ] [YOU] Check the public app link from a fresh private browser window.
+- [ ] [YOU] Submit at https://buffer.com/api/commit/submit before **Nov 13, 11:59 PM PT** (Nov 14, 09:59 Cairo).
+- [ ] [YOU] Build-in-public: 3–5 posts between now and Nov 13, each disclosing it's about Buffer Commit. Save the links; the form takes up to five.
+- [ ] [YOU] Keep the host, DB and R2 running until at least **Dec 7**.
 
 Buffer slack: Nov 13 is the hard deadline; the plan leaves one day of margin.
 
