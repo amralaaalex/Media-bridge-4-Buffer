@@ -146,11 +146,13 @@ def _get_channels_cached(db: Session, user: User, http: httpx.Client) -> list[di
         return cached[1]
     token = oauth.get_access_token(db, user, http)
     try:
-        channels = buffer_client.get_channels(http, token, user.buffer_org_id)
+        # Every organization, not just the first: a login can belong to several workspaces.
+        channels = buffer_client.get_all_channels(http, token)
     except buffer_client.BufferUnauthorized as exc:
         oauth.mark_disconnected(db, user)
         raise oauth.ReauthRequired(str(exc)) from exc
-    _channel_cache[user.id] = (time.monotonic(), channels)
+    if channels:  # an empty list isn't cached, so "connect one in Buffer, then refresh" works
+        _channel_cache[user.id] = (time.monotonic(), channels)
     return channels
 
 
@@ -198,7 +200,7 @@ def callback(request: Request, db: DB, http: Http):
     if user is None:
         user = User(buffer_account_id=account["id"])
         db.add(user)
-    # Buffer users can have several orgs; the first one is enough for now.
+    # Only the CLI and smoke test use this; the channel picker lists every organization.
     user.buffer_org_id = orgs[0]["id"] if orgs else None
     user.disconnected_at = None
     db.flush()
@@ -348,6 +350,9 @@ def list_channels(db: DB, http: Http, user: CurrentUser) -> list[dict]:
         raise HTTPException(
             429, f"Buffer's rate limit was reached. Try again in {exc.retry_after}s."
         ) from exc
+    except (buffer_client.BufferError, httpx.HTTPError) as exc:
+        log.warning("Loading channels failed: %s", exc)
+        raise HTTPException(502, "Couldn't load your channels from Buffer. Try again.") from exc
     return [c for c in channels if not c.get("isLocked")]
 
 

@@ -239,6 +239,39 @@ def test_pages_render(db, user, monkeypatch):
         assert app_page.status_code == 200 and "New post" in app_page.text
 
 
+def test_channels_endpoint_lists_every_org_and_does_not_cache_an_empty_list(db, user):
+    from app import main
+
+    channels: dict[str, list[dict]] = {"o1": [], "o2": []}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if "account" in body["query"]:
+            orgs = [{"id": "o1", "name": "Mine"}, {"id": "o2", "name": "Client"}]
+            return httpx.Response(
+                200, json={"data": {"account": {"id": "a", "organizations": orgs}}}
+            )
+        org = body["variables"]["organizationId"]
+        return httpx.Response(200, json={"data": {"channels": channels[org]}})
+
+    main._channel_cache.clear()
+    main.app.dependency_overrides[main.require_user] = lambda: db.get(User, user.id)
+    try:
+        with (
+            httpx.Client(transport=httpx.MockTransport(handler)) as http,
+            TestClient(main.app, base_url="https://testserver") as client,
+        ):
+            main.app.dependency_overrides[main.get_http] = lambda: http
+            assert client.get("/api/channels").json() == []
+            # The user connects a channel in their second organization, then refreshes.
+            channels["o2"] = [{"id": "c2", "service": "x", "isLocked": False}]
+            listed = client.get("/api/channels").json()
+            assert [(c["id"], c["organizationName"]) for c in listed] == [("c2", "Client")]
+    finally:
+        main.app.dependency_overrides.clear()
+        main._channel_cache.clear()
+
+
 def test_delete_account_removes_everything(db, buffer, user, r2):
     from app.main import app, require_user
 

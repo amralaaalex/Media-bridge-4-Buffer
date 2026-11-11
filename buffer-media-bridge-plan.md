@@ -2,7 +2,7 @@
 
 Working name only. The terms say a submission must not be named or presented so that it looks like an official Buffer product. Pick a neutral product name before submitting (see section 2, Naming) and describe it as "built on the Buffer API".
 
-Last updated: 2026-11-04 (contest rules verified against the official page and the terms at https://buffer.com/api/commit/terms)
+Last updated: 2026-11-11 (remaining work re-planned by day in section 7; contest rules verified 2026-11-04 against the official page and the terms at https://buffer.com/api/commit/terms)
 Owner: Amr
 Purpose of this file: a single source of truth so any session (human or Claude) can pick up the project without re-reading the chat history. Update the task statuses and the "Decisions log" as work progresses.
 
@@ -265,15 +265,13 @@ Owner tags: **[YOU]** means Amr does it (accounts, setup, content, recording). *
 - [x] [YOU] R2 bucket `media-bridge` with a public r2.dev URL and an API token.
 - [x] [CC] R2 upload/delete helper. Smoke test: R2 image → LinkedIn draft with alt text, verified live.
 
-### Setup on Amr's side, start now (these block later steps)
+### Setup on Amr's side
+Open items from this list (second Buffer account, Discord intro, smoke-test draft) moved to "Remaining work" below.
 - [-] [YOU] **Second Buffer channel for publish tests.** Dropped: Amr is OK with publishing on LinkedIn. Test posts are listed in `test_data/posts.csv`. Connect a throwaway Bluesky or Mastodon account to the same Buffer org (the Free plan allows 3). Needed by the Day 3–4 "post publishes → file purged" test, so it doesn't post to the real LinkedIn.
-- [ ] [YOU] **Second Buffer account** (different email, Free plan, one channel). Use it to test the OAuth flow the way judges will, as an account that isn't the app owner.
 - [x] [YOU] **Postgres:** Neon project `media-bridge` (`wild-king-33369087`) in org Amr, region aws-eu-central-1 (Frankfurt), close to the R2 bucket (WEUR). `.env` uses the direct (unpooled) endpoint as `postgresql+psycopg://`.
-- [ ] [YOU] **Hosting account:** Render or Fly.io, on a paid **always-on** instance (a few USD a month). Free tiers sleep, which stops the cleanup job and can fail the judges' first request. Connect it to the GitHub repo.
-- [ ] [YOU] **Domain (recommended):** a domain on Cloudflare for `media.<domain>` (the R2 custom domain, replacing r2.dev, which Cloudflare rate-limits and labels as dev-only) and `app.<domain>` (the app). Skip it if needed; r2.dev plus the host's default URL also work.
+- [x] [YOU] **Hosting:** Render, starter plan (always on), Frankfurt, connected to the GitHub repo. Free tiers sleep, which would stop the cleanup job and can fail the judges' first request.
+- [-] [YOU] **Domain:** dropped (decision 2026-11-04). The app stays on the Render URL and images on r2.dev.
 - [x] [YOU] **Product name:** `media-bridge`.
-- [ ] [YOU] Join the contest Discord and post a one-line intro. That is build-in-public post #1, and it must disclose it's about Buffer Commit.
-- [ ] [YOU] Delete the smoke-test draft in Buffer (post `6aeb02cd1d881477a61aa3cc`). After that, its R2 object can be removed.
 
 ### Day 3–4 (Nov 5–7): lifecycle [CC]
 - [x] [CC] `media_files` and `cleanup_events` tables. Keep `create_all` (no Alembic) unless the schema needs to change after deploy.
@@ -282,43 +280,88 @@ Owner tags: **[YOU]** means Amr does it (accounts, setup, content, recording). *
 - [x] [CC] Cleanup job (in-process thread that sleeps until the next `next_check_at`; APScheduler wasn't needed). It checks only files past `due_at`, with up to 30 aliased lookups per call, follows the section 5 decision table, writes `cleanup_events`, and backs off on rate limits.
 - [x] [CC] TTL expiry (`MEDIA_TTL_DAYS`) and handling for a post deleted in Buffer (resolves the open question in section 6).
 - [x] [CC] "Delete now" per file (`POST /api/files/{id}/delete`). If the post is still pending, warn that it will lose its image.
-- [ ] [CC + YOU] Live test: schedule a post 5–10 min out on the throwaway channel, then confirm the file survives until `sent` and is purged after. Needs the second channel.
+- [x] [CC + YOU] Live test: schedule a post 5–10 min out, then confirm the file survives until `sent` and is purged after. Passed 2026-11-04 on Amr's LinkedIn instead of a throwaway channel (see the decisions log).
 
 ### Day 5 (Nov 8): UI [CC]
 - [x] [CC] Upload page: drag-and-drop, channel picker, caption, alt text, and a queue / schedule / draft choice.
 - [x] [CC] Status page (the "Your images" panel next to the composer): files with state, linked post, due and purge times, and the delete-now button.
 - [x] [CC] Privacy note: what is stored, for how long, and how to delete it. Also serve it at `/privacy` so its URL can go on the app client.
 - [x] [CC] Friendly errors: Buffer rejections, rate limits, reconnect prompts.
-- [ ] [YOU] Review the UI. The Delight Award is judged on user experience.
 
 ### Day 6–7 (Nov 9–10): add-ons, only if core is done
-- [ ] [CC] Image prep per network (Pillow: resize, compress, convert format).
+- [-] [CC] Image prep per network (Pillow: resize, compress, convert format). Deferred until after submission because of the feature freeze from Nov 11.
 - [x] [CC] Agent access: per-user agent keys (`mb_…`, SHA-256 stored, shown once, revocable) as `Authorization: Bearer` on the JSON API, plus a **copy-paste prompt** on the home page that works with any agent that can run `curl`. Verified by following the copied prompt literally with curl: channels → upload → draft → status → delete. Buffer's own MCP can't upload, which makes a good story for the write-up.
 - [x] [CC] Stats page from `cleanup_events`: public `/stats` + `/api/stats` (anonymous aggregates, a single-series daily chart with tooltip and table view, colours validated with the dataviz validator) (files held and purged, bytes, average hold time).
 
 ### Day 8 (Nov 11): ship
 - [x] [CC] Deploy config: `render.yaml` (native Python runtime, Frankfurt, starter plan, `/health` check), proxy headers, app logging, and a Postgres advisory lock so only one cleanup worker runs during deploy overlap. A Dockerfile was skipped because Docker isn't available to test it. `.env.production` (gitignored) holds every Render env var.
-- [ ] [CC] README.
 - [x] [YOU + CC] **Before deploying, empty the Neon `main` branch** (done 2026-11-04 with Amr's OK; `dev` untouched) (needs Amr's OK, because it deletes data).
   - `main` still holds the test files and a copy of Amr's Buffer refresh token, which `dev` also has.
   - Refresh tokens are single-use, so if both copies ever refresh, Buffer revokes the grant.
   - Truncate `cleanup_events`, `media_files`, `oauth_tokens` and `users` on `main`. Production users log in fresh on the deployed app.
 - [x] [YOU] Deploy. **Live at https://media-bridge-b4qm.onrender.com** (2026-11-04). Set the env vars on the host (the `.env` values with the Postgres URL, and `BUFFER_REDIRECT_URI` / `APP_BASE_URL` set to the production URL).
 - [x] [YOU] App client: add the production redirect URI (`https://media-bridge-b4qm.onrender.com/callback`; Amr logged in on prod successfully) `https://<app-domain>/callback`, the logo and the privacy policy URL (`/privacy`).
-- [ ] [YOU] R2: attach the custom domain and update `R2_PUBLIC_BASE_URL` (if a domain is used).
-- [ ] [CC + YOU] End-to-end test on production using the **second Buffer account**.
-- [ ] [CC] Rate-limit review of the cleanup job against real usage.
+- [-] [YOU] R2: attach the custom domain and update `R2_PUBLIC_BASE_URL`. Dropped with the domain.
 
-### Day 9 (Nov 12): submit
-- [ ] [CC] Draft the ~300-word summary (problem with the roadmap votes, audience, API surface, next steps) and a longer README. [YOU] Edit it into your voice.
-- [ ] [YOU] Record the demo video (**≤ 2 min**, live API, no slides): upload → schedule → shows in Buffer → publishes → file purged. Use section 8 as the script; schedule the post ~5 min out before recording.
-- [ ] [YOU] Get ready for the form: app client ID, full legal name, registration email (the verified Buffer email), social handles.
-- [ ] [YOU] Check the public app link from a fresh private browser window.
-- [ ] [YOU] Submit at https://buffer.com/api/commit/submit before **Nov 13, 11:59 PM PT** (Nov 14, 09:59 Cairo).
-- [ ] [YOU] Build-in-public: 3–5 posts between now and Nov 13, each disclosing it's about Buffer Commit. Save the links; the form takes up to five.
-- [ ] [YOU] Keep the host, DB and R2 running until at least **Dec 7**.
+Open items from Day 8 and Day 9 (README, second-account test, rate-limit review, summary, video, form, submit) moved to "Remaining work" below.
 
-Buffer slack: Nov 13 is the hard deadline; the plan leaves one day of margin.
+### Remaining work, re-planned 2026-11-11
+
+**Feature freeze from Nov 11:** only fixes for bugs found in testing go to `main`, because every push to `main` redeploys production.
+**Deadline:** Fri Nov 13, 11:59 PM PT = Sat Nov 14, 09:59 Cairo. Aim to submit on the evening of Nov 13 (Cairo), not in the last hours.
+
+**Wed Nov 11**
+- [x] [YOU] **Second Buffer account** (different email, Free plan), with an X channel instead of Bluesky. Steps in 7a.
+- [x] [YOU + CC] **Second-account end-to-end test on production** (scenario 8). Steps in 7a. Passed 2026-11-11 with an X channel; see the decisions log. Amr confirmed the separation check (step 8): the second account's file doesn't appear in his own session.
+- [ ] [YOU] Delete the smoke-test draft in Buffer (post `6aeb02cd1d881477a61aa3cc`). [CC] then removes its R2 object.
+- [ ] [YOU] Join the contest Discord and post a one-line intro. That is build-in-public #1, and it must disclose it's about Buffer Commit.
+- [ ] [YOU] Review the UI on production (desktop and phone, light and dark) and send notes. The Delight Award is judged on user experience.
+- [x] [CC] Re-plan the remaining work by day and fix stale checkboxes in this section.
+- [x] [CC] **Channels from every Buffer organization** (feature-freeze exception, Amr's call). Before, only the first organization's channels showed, so a judge whose channels sit in another organization would see "No channels". The picker labels channels with their organization when there's more than one. An empty list is no longer cached, so "connect one in Buffer, then refresh" works. Tests added; checked live on `dev`.
+- [~] [CC] README: the problem, how it works, the Buffer API surface, privacy and retention, agent access, local setup, deploy, known limits (images only). Drafted in `README.md`; waiting for Amr's review.
+- [~] [CC] Draft the ~300-word summary: the problem (with the roadmap votes), audience, API surface, next steps. Drafted in `docs/submission.md`.
+- [~] [CC] Draft the build-in-public posts: the Discord intro and 2–4 posts, each disclosing Buffer Commit. Drafted in `docs/submission.md`, with a form checklist.
+
+**Thu Nov 12** (contest office hours: the fallback if other accounts can't log in)
+- [ ] [CC] Verify the second-account test in the production DB (row states and cleanup events only, never tokens), and fix what it found.
+- [ ] [CC] Apply the UI review fixes.
+- [ ] [CC] Rate-limit review of the cleanup job against real production usage.
+- [ ] [CC] Check production's public pages in Edge (landing, privacy, stats, error pages; light, dark and phone width) with screenshots.
+- [ ] [CC] Demo shot list with timings for the ≤ 2 min video (refines section 8).
+- [ ] [YOU] Edit the summary and the README intro into your voice.
+- [ ] [YOU] Build-in-public #2: post scenario 5 (queue publish on LinkedIn) through the production app. This also tests Amr's own account on production.
+- [ ] [YOU] Record the demo video (**≤ 2 min**, live API, no slides): upload → schedule → shows in Buffer → publishes → file purged. Scenario 9: schedule the post ~5 min out before recording. It publishes on LinkedIn as build-in-public #3.
+- [ ] [YOU] Collect the form details: the app client ID (`BUFFER_CLIENT_ID` in `.env.production`, also in Buffer's API settings), full legal name, the verified Buffer email used at registration, social handles, and up to five build-in-public links.
+
+**Fri Nov 13**
+- [ ] [YOU] Check the public app link from a fresh private browser window: log in, upload, draft, delete now.
+- [ ] [CC] Final repo pass: README links, plan statuses, commit and push.
+- [ ] [YOU] Submit at https://buffer.com/api/commit/submit.
+
+**After submitting (to Dec 7)**
+- [ ] [YOU] Keep Render, Neon and R2 running until at least **Dec 7**. Make sure Render's billing has a valid card on file.
+- [ ] [CC] Health and rate-limit spot checks during judging (Nov 16–20).
+
+### 7a. Second-account test (scenario 8)
+
+Goal: prove that a Buffer account that isn't the app owner's can log in, post, and have its file cleaned up. That is exactly what the judges will do.
+
+Setup (about 20 min):
+1. Open an **InPrivate window** in Edge (Ctrl+Shift+N), or a separate Edge profile, and do every step below in it. The normal window is logged into Buffer as Amr, and Buffer's consent page approves whichever account is logged in.
+2. Sign up at buffer.com with a different email, on the Free plan, and verify the email.
+3. Create a throwaway Bluesky account at bsky.app and make an app password (Settings → Privacy and security → App passwords). In the new Buffer account, connect a Bluesky channel with the handle and that app password.
+
+Test (about 20 min, mostly waiting):
+4. Open https://media-bridge-b4qm.onrender.com and click **Connect Buffer**. Buffer's consent page should show `media-bridge` and the requested permissions. Approve.
+   - If it fails, save the exact error text, the page URL and a screenshot. Bring them to office hours (Thursday) or Discord `#buffer-commit-support`.
+5. The Bluesky channel appears in the picker. Upload a small image (under 1 MB, Bluesky's image limit; `test_data/images/02.png` is 90 KB), with the caption "media-bridge test from a second Buffer account" and alt text, and schedule it 10 minutes out.
+6. In "Your images", right-click the thumbnail → Copy image address, and keep the URL.
+7. In a new tab of the same window, open Buffer: the post is in the queue with the image.
+8. Isolation check: in the normal window (logged into the app as Amr), this file must **not** appear.
+9. After the post publishes, the file shows as deleted within a few minutes, with a link to the live post. The copied image URL returns 404, and the Bluesky post still shows the image.
+10. Leave the second account connected and don't use "Delete my data" yet. It's reused for the Nov 13 check.
+
+Afterwards, tell CC the times. CC checks the production DB read-only: 2 users, file states and cleanup events, never tokens.
 
 ## 8. Demo script (what judges should see)
 
@@ -343,6 +386,23 @@ Buffer slack: Nov 13 is the hard deadline; the plan leaves one day of margin.
 
 ## 10. Decisions log
 
+- 2026-11-11: **The channel picker lists channels from every Buffer organization**, not just the first. This is an exception to the feature freeze, because judges' test accounts may have several organizations.
+  - `buffer_client.get_all_channels()` makes one `account` request, then one `channels` request per organization, up to 10. An organization that errors is skipped; auth and rate-limit errors still raise.
+  - It uses one request per organization, not one aliased request: one failing alias nulls the whole response (seen with `post` lookups), which would hide every channel.
+  - On a cache miss this costs 2 requests for a one-organization user instead of 1. The cache lasts an hour.
+  - An empty channel list isn't cached, so a user who connects a channel in Buffer sees it on refresh.
+  - `/api/channels` failures now return a readable 502, not a 500. The agent prompt lists `organizationName`.
+  - `users.buffer_org_id` (first organization) is still set; only `scripts/cli.py` and the smoke test use it.
+- 2026-11-11: Re-planned the remaining work by day (section 7) and wrote the second-account test steps (7a).
+  - **Feature freeze:** image prep per network is deferred until after submission. From now on only fixes for bugs found in testing go to `main`, because each push redeploys production.
+  - Status on Nov 11: production is up, 25 tests pass, and the production DB has 1 user (Amr) and 0 files. No other Buffer account has logged in yet.
+  - "Private" on the app client means a confidential client (it has a secret, see 6a). It doesn't limit login to the owner, as the second-account test below confirmed.
+- 2026-11-11: **Second-account end-to-end test passed on production**, with a new Buffer account (its own organization) posting to X.
+  - The account connected at 05:34:02 UTC and got a refresh token, so OAuth works for accounts other than the app owner's. That resolves the risk in section 9.
+  - A 313 KB JPEG was uploaded at 05:34:53. The post was created at 05:34:54, scheduled for 05:37:00.
+  - The worker made one status check at 05:39:00 (due + 2 min), saw `sent`, and deleted the image at 05:39:00. The public R2 URL returns 404, and the live post link was saved.
+  - Afterwards `/health` showed 115 requests left in the tightest window, so the whole flow cost about 5 of the app client's requests.
+  - Separation check passed: the file didn't appear in Amr's own session.
 - 2026-10-31: Explored four ideas (content agent, bilingual pipeline, agent gateway, warehouse connector).
 - 2026-11-03: Designed "Leash" scoped-token gateway; judged too complex / low roadmap demand (4 votes).
 - 2026-11-04: **Chose media hosting as the core feature.** Keep it simple. Leash parked as a late add-on.

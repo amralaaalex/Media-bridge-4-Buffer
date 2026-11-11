@@ -181,6 +181,8 @@
       return;
     }
     const firstUsable = state.channels.find((c) => !c.isDisconnected);
+    // A Buffer login can belong to several organizations; name them only when it matters.
+    const manyOrgs = new Set(state.channels.map((c) => c.organizationId)).size > 1;
     for (const c of state.channels) {
       const label = document.createElement("label");
       label.className = "channel";
@@ -201,6 +203,7 @@
       span.append(c.displayName || c.name);
       const small = document.createElement("small");
       small.textContent = c.isDisconnected ? "disconnected" : c.service;
+      if (manyOrgs && c.organizationName) small.textContent += ` · ${c.organizationName}`;
       span.append(small);
       label.append(input, span);
       box.append(label);
@@ -516,7 +519,7 @@
       ...(local ? ["This is a local server with a self-signed certificate, so add -k to curl."] : []),
       "",
       "## Endpoints",
-      "1. List my channels: GET /api/channels -> [{id, name, displayName, service}]",
+      "1. List my channels: GET /api/channels -> [{id, name, displayName, service, organizationName}]",
       `2. Upload an image (JPEG, PNG, GIF or WebP, up to ${window.MB.maxUploadMb} MB): POST /api/files as multipart form field "file" -> {id, state: "UPLOADED", ...}`,
       '3. Create the Buffer post for that upload: POST /api/files/{id}/post with JSON {"channel_id", "text", "alt_text", "mode", "due_at"}',
       '   mode is "draft", "queue", "schedule" or "now". due_at is only for "schedule": ISO 8601 with a UTC offset, e.g. "2026-11-20T09:00:00+02:00".',

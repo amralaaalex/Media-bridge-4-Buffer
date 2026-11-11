@@ -115,6 +115,33 @@ def get_channels(http: httpx.Client, access_token: str, organization_id: str) ->
     return data["channels"]
 
 
+# Each organization costs one request, so a login in many workspaces can't drain the quota.
+MAX_ORGANIZATIONS = 10
+
+
+def get_all_channels(http: httpx.Client, access_token: str) -> list[dict]:
+    """Channels from every organization (workspace) the user belongs to, tagged with it.
+
+    One request for the account, then one per organization. An organization that fails is
+    skipped so the others still show; auth and rate-limit failures still raise.
+    """
+    orgs = get_account(http, access_token).get("organizations") or []
+    channels: list[dict] = []
+    for org in orgs[:MAX_ORGANIZATIONS]:
+        try:
+            org_channels = get_channels(http, access_token, org["id"])
+        except (BufferUnauthorized, BufferRateLimited):
+            raise
+        except BufferError as exc:
+            log.warning("Skipping organization %s: %s", org["id"], exc)
+            continue
+        channels += [
+            {**c, "organizationId": org["id"], "organizationName": org.get("name")}
+            for c in org_channels
+        ]
+    return channels
+
+
 CREATE_POST_MUTATION = """
 mutation CreatePost($input: CreatePostInput!) {
   createPost(input: $input) {
