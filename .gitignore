@@ -32,3 +32,12 @@ test_data/images/
 
 # Driver output (screenshots)
 .run/
+
+# Local research notes: never published
+research/
+
+# Submission drafts and form details (legal name, email): local only
+docs/submission.md
+
+# Demo video recordings (large files, local only)
+demo/

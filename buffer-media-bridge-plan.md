@@ -2,7 +2,7 @@
 
 Working name only. The terms say a submission must not be named or presented so that it looks like an official Buffer product. Pick a neutral product name before submitting (see section 2, Naming) and describe it as "built on the Buffer API".
 
-Last updated: 2026-11-11 (remaining work re-planned by day in section 7; contest rules verified 2026-11-04 against the official page and the terms at https://buffer.com/api/commit/terms)
+Last updated: 2026-11-14 (submitted; remaining work re-planned by day in section 7; contest rules verified 2026-11-04 against the official page and the terms at https://buffer.com/api/commit/terms)
 Owner: Amr
 Purpose of this file: a single source of truth so any session (human or Claude) can pick up the project without re-reading the chat history. Update the task statuses and the "Decisions log" as work progresses.
 
@@ -245,6 +245,8 @@ createPost(input: {
 - One channel: LinkedIn profile "Amr Alaa" `6aeaf8e8e29c69a1715a60d9`. This is the **real public profile**, so test with `saveToDraft: true`. Consider adding a throwaway second channel for publish tests (e.g. Bluesky or Mastodon).
 - The MCP draws on the personal quota: 150 / 15 min, 600 / 24 h, 1,000 / 30 days. That is separate from the app client's quota.
 
+**Official app-client policy since 2026-10-27** (announced by Buffer and documented at https://developers.buffer.com/guides/api-limits.html; matches the live measurement): 100 + 10 per authorized user per 15 min, 500 + 25 per user per 24 h, and 15,000 + 100 per user per 30 days. It's the same on every plan and shared by all of an app's users, counting up to 1,000 users. The handbook's 250/day below is outdated. The design stays conservative anyway.
+
 **Rate limits (the binding constraint for cleanup):**
 - The contest handbook gives the Free tier as **100 / 15 min, 250 / 24 h, 3,000 / 30 days, per client, shared by all users including judges**.
 - The docs give a base of 100 / 500 / 15,000, plus +10 / +25 / +100 per authorized user.
@@ -308,37 +310,46 @@ Open items from Day 8 and Day 9 (README, second-account test, rate-limit review,
 ### Remaining work, re-planned 2026-11-11
 
 **Feature freeze from Nov 11:** only fixes for bugs found in testing go to `main`, because every push to `main` redeploys production.
+**Public posting day is Thu Nov 12 (Amr's call, 2026-11-11).** Nothing public goes out before then: no Discord intro, no build-in-public posts, no public repo. The GitHub repo is private; the live site is the only public surface.
 **Deadline:** Fri Nov 13, 11:59 PM PT = Sat Nov 14, 09:59 Cairo. Aim to submit on the evening of Nov 13 (Cairo), not in the last hours.
 
 **Wed Nov 11**
 - [x] [YOU] **Second Buffer account** (different email, Free plan), with an X channel instead of Bluesky. Steps in 7a.
 - [x] [YOU + CC] **Second-account end-to-end test on production** (scenario 8). Steps in 7a. Passed 2026-11-11 with an X channel; see the decisions log. Amr confirmed the separation check (step 8): the second account's file doesn't appear in his own session.
-- [ ] [YOU] Delete the smoke-test draft in Buffer (post `6aeb02cd1d881477a61aa3cc`). [CC] then removes its R2 object.
-- [ ] [YOU] Join the contest Discord and post a one-line intro. That is build-in-public #1, and it must disclose it's about Buffer Commit.
+- [x] [YOU] Delete the smoke-test draft in Buffer (post `6aeb02cd1d881477a61aa3cc`). [CC] then removes its R2 object. Done 2026-11-11: the object was `ec4990d5-….png`, which no row in `dev` or `main` referenced. It was matched to the draft by the post ID's timestamp, deleted, and its public URL now returns 404. Amr also deleted the `dev` test draft `6aeb1008…`. A forced cleanup check on `dev` saw `post_deleted` and purged its image, and the Buffer MCP confirms `6aeb02cd…` is gone. **The R2 bucket is now empty.**
+- [x] [YOU + CC] Read the contest Discord before posting anything: the main contest channel and Buffer's general API channel. Notes are kept locally and aren't part of the repo. Amr skipped the support channel; it isn't needed.
+- [x] [CC] Analyze those channels before anything is posted: rules, posting norms, and Buffer's answers that affect us. The intro draft in `docs/submission.md` was rewritten to match. Found: the official rate-limit policy (Oct 27) and Buffer's undated native-upload work. Polling stays, since no webhook was found.
+- [x] [YOU] Test login on a phone while logged out of Buffer. A mobile-web OAuth error had been reported for that case. Passed 2026-11-11.
 - [ ] [YOU] Review the UI on production (desktop and phone, light and dark) and send notes. The Delight Award is judged on user experience.
 - [x] [CC] Re-plan the remaining work by day and fix stale checkboxes in this section.
-- [x] [CC] **Channels from every Buffer organization** (feature-freeze exception, Amr's call). Before, only the first organization's channels showed, so a judge whose channels sit in another organization would see "No channels". The picker labels channels with their organization when there's more than one. An empty list is no longer cached, so "connect one in Buffer, then refresh" works. Tests added; checked live on `dev`.
-- [~] [CC] README: the problem, how it works, the Buffer API surface, privacy and retention, agent access, local setup, deploy, known limits (images only). Drafted in `README.md`; waiting for Amr's review.
-- [~] [CC] Draft the ~300-word summary: the problem (with the roadmap votes), audience, API surface, next steps. Drafted in `docs/submission.md`.
+- [x] [CC] **Channels from every Buffer organization** (feature-freeze exception, Amr's call). Before, only the first organization's channels showed, so a judge whose channels sit in another organization would see "No channels". The picker labels channels with their organization when there's more than one. An empty list is no longer cached, so "connect one in Buffer, then refresh" works. Tests added; checked live on `dev`. Shipped in `d999529` (live 05:51 UTC). Amr confirmed both accounts load their channels on production. Not tested with a real multi-organization account.
+- [x] [CC] README: the problem, how it works, the Buffer API surface, privacy and retention, agent access, local setup, deploy, known limits (images only). Pushed 2026-11-14.
+- [x] [CC] Draft the ~300-word summary: the problem (with the roadmap votes), audience, API surface, next steps. Drafted in `docs/submission.md`; a ~315-word version went into the form on 2026-11-14.
 - [~] [CC] Draft the build-in-public posts: the Discord intro and 2–4 posts, each disclosing Buffer Commit. Drafted in `docs/submission.md`, with a form checklist.
 
-**Thu Nov 12** (contest office hours: the fallback if other accounts can't log in)
+**Thu Nov 12: posting day** (also contest office hours)
+- [ ] [YOU] Post the Discord intro in the main contest channel, using the draft in `docs/submission.md` plus a short clip. That's build-in-public #1, and it must disclose it's about Buffer Commit.
+- [x] [YOU + CC] Decide on the repo's visibility. Decided 2026-11-14: the repo goes public, so the app's footer "Source" link and the privacy page's GitHub link work. The contest doesn't require open source.
+- [x] [CC] Commit and push the README. Done 2026-11-14, after submitting.
 - [ ] [CC] Verify the second-account test in the production DB (row states and cleanup events only, never tokens), and fix what it found.
 - [ ] [CC] Apply the UI review fixes.
 - [ ] [CC] Rate-limit review of the cleanup job against real production usage.
 - [ ] [CC] Check production's public pages in Edge (landing, privacy, stats, error pages; light, dark and phone width) with screenshots.
-- [ ] [CC] Demo shot list with timings for the ≤ 2 min video (refines section 8).
+- [x] [CC] Demo shot list with timings for the ≤ 2 min video (refines section 8). Written 2026-11-14 in `docs/submission.md`: one recording with a pause while the post publishes.
 - [ ] [YOU] Edit the summary and the README intro into your voice.
 - [ ] [YOU] Build-in-public #2: post scenario 5 (queue publish on LinkedIn) through the production app. This also tests Amr's own account on production.
-- [ ] [YOU] Record the demo video (**≤ 2 min**, live API, no slides): upload → schedule → shows in Buffer → publishes → file purged. Scenario 9: schedule the post ~5 min out before recording. It publishes on LinkedIn as build-in-public #3.
-- [ ] [YOU] Collect the form details: the app client ID (`BUFFER_CLIENT_ID` in `.env.production`, also in Buffer's API settings), full legal name, the verified Buffer email used at registration, social handles, and up to five build-in-public links.
+- [x] [YOU] (Done 2026-11-14: https://youtu.be/GZNy3VyzGwQ, unlisted.) Record the demo video (**≤ 2 min**, live API, no slides): upload → schedule → shows in Buffer → publishes → file purged. Scenario 9: schedule the post ~5 min out before recording. It publishes on LinkedIn as build-in-public #3.
+- [x] [YOU] Collect the form details: the app client ID (`BUFFER_CLIENT_ID` in `.env.production`, also in Buffer's API settings), full legal name, the verified Buffer email used at registration, social handles, and up to five build-in-public links.
 
 **Fri Nov 13**
 - [ ] [YOU] Check the public app link from a fresh private browser window: log in, upload, draft, delete now.
-- [ ] [CC] Final repo pass: README links, plan statuses, commit and push.
-- [ ] [YOU] Submit at https://buffer.com/api/commit/submit.
+- [x] [CC] Final repo pass: README links, plan statuses, commit and push. Done 2026-11-14, after submitting.
+- [x] [YOU] Submit at https://buffer.com/api/commit/submit. **Submitted 2026-11-14, about 07:30 UTC (09:30 Cairo), before the 07:59 UTC deadline.**
 
 **After submitting (to Dec 7)**
+- [ ] [YOU] Save proof of the submission: the confirmation screen or email.
+- [~] [YOU + CC] Fix the dead "Source" and GitHub links before judging starts on Nov 16. Decided 2026-11-14: make the repo public. [CC] pushed the README. [YOU] switch the visibility in GitHub (Settings → General → Danger Zone → Change repository visibility).
+- [ ] [YOU] Keep the YouTube video unlisted and online until Dec 7.
 - [ ] [YOU] Keep Render, Neon and R2 running until at least **Dec 7**. Make sure Render's billing has a valid card on file.
 - [ ] [CC] Health and rate-limit spot checks during judging (Nov 16–20).
 
@@ -386,6 +397,33 @@ Afterwards, tell CC the times. CC checks the production DB read-only: 2 users, f
 
 ## 10. Decisions log
 
+- 2026-11-14: **The GitHub repo goes public** (Amr's call, after submitting), so the app's "Source" and GitHub links work for judges.
+  - The reason for keeping it private ended with the deadline.
+  - Before the switch, the README was pushed and the history was checked for secrets (none found).
+- 2026-11-14: **Submitted to Buffer Commit** at about 07:30 UTC, half an hour before the deadline.
+  - Form: project name `media-bridge`, the production link, a ~315-word summary, and the demo video https://youtu.be/GZNy3VyzGwQ (unlisted).
+  - The video joins two screen recordings, sped up to fit the time limit.
+  - Production was healthy at submission: `/health` 200 with 125 Buffer requests left.
+  - Not confirmed at submission: the Discord intro, the build-in-public posts and the UI review.
+  - `demo/` (video files) is gitignored.
+- 2026-11-14 (06:10 UTC, 1 h 48 min before the deadline): **pre-submission check of production passed.**
+  - `/health` 200 in 0.4 s, with 122 Buffer requests left in the tightest window. Landing, privacy, stats and static files return 200; `/api/channels` without a login returns 401.
+  - `/login` redirects to Buffer with the production redirect URI, all four scopes and PKCE S256, and Buffer accepts it (303 to its consent flow).
+  - Public stats: 3 uploaded, 3 posted, 3 deleted after publishing, 0 held, median 2 min to delete, 1 status check per post. The R2 bucket is empty.
+  - The deployed code is `d999529`. The README and plan updates are still unpushed; nothing is pushed this close to the deadline, because a push redeploys production.
+  - Still open: the repo is private, so the footer "Source" link and the privacy page's GitHub link return 404. Fix after submitting.
+  - The production DB wasn't queried directly (the Neon connector didn't connect in this session); the public stats stand in for it.
+- 2026-11-11: **All public posting moves to Thu Nov 12** (Amr): the Discord intro, build-in-public posts, and any repo or README publicity.
+  - The GitHub repo is private (the API returns 404 to anonymous requests), so the code isn't visible. The footer "Source" link is therefore a dead end; decide on Nov 12.
+  - `docs/submission.md` is gitignored, because it will hold form details (legal name, email) and pre-launch drafts.
+- 2026-11-11: **Buffer is working on native media upload, with no timeline**, according to Buffer staff in the developer Discord.
+  - A `manageUploads` permission exists in `OrganizationAction`, with no upload mutation yet.
+  - **Positioning:** media-bridge is the bridge until then. When native upload ships, it hands files to Buffer and keeps the lifecycle tracking and agent access. The summary and README next steps say so.
+  - The official Oct 27 rate-limit policy matches our measured limits (see 6a).
+- 2026-11-11: **Read the contest Discord before posting.**
+  - Other entries also host media for Buffer posts, so **our pitch leads with the lifecycle** (kept exactly until `sent`, then deleted), then agent access and stats, never "we host images" alone. Buffer staff said similar ideas are judged individually.
+  - No release of native media upload has been announced, so the usefulness pitch stands.
+  - **The judging window is Nov 16–20.** Judges likely spend only a few minutes per entry, so the landing page and the first 30 seconds of the video matter most.
 - 2026-11-11: **The channel picker lists channels from every Buffer organization**, not just the first. This is an exception to the feature freeze, because judges' test accounts may have several organizations.
   - `buffer_client.get_all_channels()` makes one `account` request, then one `channels` request per organization, up to 10. An organization that errors is skipped; auth and rate-limit errors still raise.
   - It uses one request per organization, not one aliased request: one failing alias nulls the whole response (seen with `post` lookups), which would hide every channel.
